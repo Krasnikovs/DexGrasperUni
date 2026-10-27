@@ -1,0 +1,15 @@
+[tool.hatch.build.target.wheel]
+packages = [
+    "src/datasets",
+    "src/models",
+    "src/optimizer",
+    "src/utils"
+    ]
+
+[project]
+name = "dex_project_utils"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy==2.2.6"
+]
