@@ -1,0 +1,9 @@
+[submodule "submodules/urdf_parser_py"]
+	path = submodules/urdf_parser_py
+	url = https://github.com/ros/urdf_parser_py.git
+[submodule "submodules/Pointcept"]
+	path = submodules/Pointcept
+	url = https://github.com/Pointcept/Pointcept.git
+[submodule "submodules/pytorch3d"]
+	path = submodules/pytorch3d
+	url = https://github.com/facebookresearch/pytorch3d.git
