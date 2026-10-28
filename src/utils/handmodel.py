@@ -258,7 +258,7 @@ class HandModel:
         return surface_points * self.scale
 
 def get_handmodel(batch_size, device, hand_scale=1., robot='shadowhand'):
-    urdf_assets_meta = json.load(open("/home/gustavskrasnikovs/repos/off_shute/src/graspany-addapt/assets/urdf/urdf_assets_meta.json"))
+    urdf_assets_meta = json.load(open("/home/ubuntuchair/repos/bs_dump/src/graspany-addapt/assets/urdf/urdf_assets_meta.json"))
     urdf_path = urdf_assets_meta['urdf_path'][robot]
     meshes_path = urdf_assets_meta['meshes_path'][robot]
     hand_model = HandModel(robot, urdf_path, meshes_path, batch_size=batch_size, device=device, hand_scale=hand_scale)

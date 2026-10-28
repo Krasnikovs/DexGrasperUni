@@ -344,7 +344,7 @@ if __name__ == '__main__':
 
     # dataloader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True)
 
-    params = yaml.safe_load(open('data/dex_hand_params/all.yaml', 'r'))
+    params = yaml.safe_load(open('data/all.yaml', 'r'))
 
     model = UNetModel(params['UNetModel'], device).to(device)
     model = DDPM(model, False, device, params['DDPM']).to(device)
@@ -353,7 +353,7 @@ if __name__ == '__main__':
 
     load_model = True
     if load_model:
-        model = loadWeights(model, URL='data/models/model_epoch_699-26_10_13.pth', loadOnlyWeights=True)
+        model = loadWeights(model, URL='data/model_epoch_699-26_10_13.pth', loadOnlyWeights=True)
 
     rclpy.init()
 

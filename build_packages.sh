@@ -11,8 +11,10 @@ echo "Installing torch and torchvision"
 
 echo "Building and installing packages from submodules"
 
-FORCE_CUDA=1 TORCH_CUDA_ARCH_LIST="8.6" .venv/bin/pip install --no-build-isolation -e ./submodules/pytorch3d
-FORCE_CUDA=1 TORCH_CUDA_ARCH_LIST="8.6" .venv/bin/pip install --no-build-isolation -e ./submodules/Pointcept/libs/pointops
+CUDA_COMPUTE_CAPABILITY="8.9"
+
+FORCE_CUDA=1 TORCH_CUDA_ARCH_LIST=$CUDA_COMPUTE_CAPABILITY .venv/bin/pip install --no-build-isolation -e ./submodules/pytorch3d
+FORCE_CUDA=1 TORCH_CUDA_ARCH_LIST=$CUDA_COMPUTE_CAPABILITY .venv/bin/pip install --no-build-isolation -e ./submodules/Pointcept/libs/pointops
 .venv/bin/pip install --no-build-isolation -e ./submodules/urdf_parser_py
 
 echo "Building src"
