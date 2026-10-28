@@ -3,6 +3,7 @@ import numpy as np
 import pickle
 import os
 from typing import Dict
+import yaml
 
 from models.ddpm import DDPM
 from models.unet import UNetModel
@@ -20,8 +21,8 @@ def collate_fn_squeeze_pcd_batch(batch_data) -> Dict:
     offset = torch.IntTensor(offset)
     batch_data['offset'] = offset
 
-    batch_data['pos'] = batch_data['pos'].flatten(start_dim=0, end_dim=1)
-    batch_data['feat'] = batch_data['feat'].flatten(start_dim=0, end_dim=1)
+    batch_data['pos'] = torch.func.rearrange(batch_data['pos'], 'b n c -> (b n) c')
+    batch_data['feat'] = torch.func.rearrange(batch_data['feat'], 'b n c -> (b n) c')
     
     return batch_data
 
@@ -116,19 +117,26 @@ if __name__ == '__main__':
 
     grasp_data, object_pcds = load_data('/home/gustavskrasnikovs/repos/off_shute/data/Realdex/Realdex')
 
+    # currated_obj_list = list(object_pcds.keys())[:int(len(list(object_pcds.keys())))]
+
+    # grasp_data['metadata'] = [data for data in grasp_data['metadata'] if data['object_name'] in currated_obj_list]
+
+    params = yaml.safe_load(open('data/dex_hand_params/all.yaml', 'r'))
+
+    train_params = params['grasp_gen_ur']
 
     data = GraspAnyting(grasp_data, object_pcds)
 
     dataloader = torch.utils.data.DataLoader(data, batch_size=128, shuffle=True)
 
-    model = UNetModel().to(device)
-    model = DDPM(model, False, device).to(device)
+    model = UNetModel(params['UNetModel'], device).to(device)
+    model = DDPM(model, False, device, params['DDPM']).to(device)
 
     load_model = False
     if load_model:
         model = loadWeights(model, URL='./data/test-model-0.pth', loadOnlyWeights=True)
 
-    model = train(model, dataloader, device=device, epoch_rate=100)
+    model = train(model, dataloader, device=device, epoch_rate=1000, learning_rate=float(train_params['lr']))
     
     saveWeights(model, URL='models/26_10_16/model-09_30.pth', saveStateOnly=True)
     print('done')
