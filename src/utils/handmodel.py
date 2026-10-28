@@ -10,6 +10,7 @@ import pytorch_kinematics as pk
 import urdf_parser_py.urdf as URDF_PARSER
 from urdf_parser_py.urdf import (URDF, Box, Cylinder, Mesh, Sphere)
 from pytorch3d.ops import knn_points
+import pointops
 
 class HandModel:
     def __init__(self, robot_name, urdf_filename, mesh_path,
@@ -280,11 +281,21 @@ def ERF_loss(obj_pcd_nor: torch.Tensor, hand_pcd: torch.Tensor):
     obj_nor = obj_pcd_nor[:, :, 3:6]
 
     # Compute K-nearest neighbors
-    knn_result = knn_points(hand_pcd, obj_pcd, K=1, return_nn=True)
-    distances = knn_result.dists
-    indices = knn_result.idx
+    # knn_result = knn_points(hand_pcd, obj_pcd, K=1, return_nn=True)
+    # distances = knn_result.dists
+    # indices = knn_result.idx
+
+    # h = torch.zeros((hand_pcd.shape[1], 3)).to(device=hand_pcd.device)
+    # o = torch.zeros((obj_pcd.shape[1], 3)).to(device=hand_pcd.device)
+    # h[:] = hand_pcd[0]
+    # o[:] = obj_pcd[0]
+
+    knn_result = pointops.knn_query(nsample=1, new_xyz=hand_pcd[0], xyz=obj_pcd[0].contiguous(), new_offset=torch.tensor(hand_pcd.shape[1], device=hand_pcd.device), offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device))
+    distances = knn_result[1].unsqueeze(0)
+    indices = knn_result[0].unsqueeze(0)
+
     # knn = knn_result.knn
-    distances = distances.sqrt()
+    # distances = distances.sqrt()
     # Extract the closest object points and normals
     hand_obj_points = torch.gather(obj_pcd, 1, indices.expand(-1, -1, 3))
     hand_obj_normals = torch.gather(obj_nor, 1, indices.expand(-1, -1, 3))
@@ -301,8 +312,18 @@ def SPF_loss(dis_points, obj_pcd: torch.Tensor, thres_dis = 0.02 ):
     dis_points = dis_points.to(dtype=torch.float32)
     obj_pcd = obj_pcd.to(dtype=torch.float32)
     dis_pred = knn_points(dis_points, obj_pcd).dists[:, :, 0] # 64*140  # squared chamfer distance from object_pc to contact_candidates_pred
+    
+    # dis_pred = pointops.knn_query(
+    #     nsample=1, 
+    #     new_xyz=dis_points[0], 
+    #     xyz=obj_pcd[0], 
+    #     new_offset=torch.tensor(dis_points.shape[1], device=dis_points.device), 
+    #     offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device)
+    # )[1].reshape(1,140)
+
     small_dis_pred = dis_pred < thres_dis ** 2# 64*140
     SPF_loss = dis_pred[small_dis_pred].sqrt().sum() / (small_dis_pred.sum().item() + 1e-5)#1
+    # SPF_loss = dis_pred[small_dis_pred].sum() / (small_dis_pred.sum().item() + 1e-5)
     return SPF_loss
 
 def SRF_loss(points):

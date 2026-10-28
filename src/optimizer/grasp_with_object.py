@@ -60,11 +60,11 @@ class GraspWithObject(Optimizer):
         """
         obj_pcd = data['pos'].to(self.device)
         self.hand_model.update_kinematics(q = x)
-        hand_pcd = self.hand_model.get_surface_points(q= x).to(dtype=torch.float32)
+        hand_pcd = self.hand_model.get_surface_points(q= x).to(dtype=torch.float32).contiguous()
         normal = data['normal'].clone().detach().requires_grad_(True).to(self.device)
         obj_pcd = torch.func.rearrange(obj_pcd, '(b n) c -> b n c', b=self._BATCH_SIZE, n=normal.shape[1])
 
-        obj_pcd_nor = torch.cat((obj_pcd, normal), dim=-1).to(dtype=torch.float32)
+        obj_pcd_nor = torch.cat((obj_pcd, normal), dim=-1).to(dtype=torch.float32).contiguous()
         ERF_loss_value = ERF_loss(obj_pcd_nor, hand_pcd)
         dis_keypoint = self.hand_model.get_dis_keypoints(q= x)
         SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd)
