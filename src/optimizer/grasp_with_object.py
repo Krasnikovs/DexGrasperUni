@@ -36,7 +36,7 @@ class GraspWithObject(Optimizer):
 
         self.asset_dir = params['asset_dir_slurm'] if slurm else params['asset_dir']
         
-        self.hand_model = get_handmodel(batch_size=self._BATCH_SIZE, device=self.device)
+        self.hand_model = get_handmodel(params['urdf_assets_file'], batch_size=self._BATCH_SIZE, device=self.device)
         self.guidance_scale = params['guidance_scale']
         self.weight_ERF_loss = params['loss_weights']['ERF_loss']
         self.weight_SPF_loss = params['loss_weights']['SPF_loss']

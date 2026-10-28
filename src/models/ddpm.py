@@ -58,6 +58,8 @@ class DDPM(nn.Module):
 
         self.opt_interval = params['opt_interval']
 
+        self.assets_file_path = params['urdf_assets_file']
+
     def set_joint_limits(self, lower_limit, upper_limit):
         self._joint_angle_lower = lower_limit.to(self.device)
         self._joint_angle_upper = upper_limit.to(self.device)
@@ -146,7 +148,7 @@ class DDPM(nn.Module):
         output = self.apply_observation(output, data)
         pred_x0 = self.sqrt_recip_alphas_cumprod[ts].reshape(B, *((1, ) * len(x_shape))) * x_t - \
             self.sqrt_recipm1_alphas_cumprod[ts].reshape(B, *((1, ) * len(x_shape))) * output
-        hand_model = get_handmodel(batch_size = B, device = self.device)
+        hand_model = get_handmodel(self.assets_file_path, batch_size = B, device = self.device)
         id_quat_rot = torch.tensor([0., 0., 0., 1.], device = self.device).view(1, 4).repeat(B, 1)
         pred_x0[:, :3] = self.trans_denormalize(pred_x0[:, :3])
         pred_x0[:, 3:] = self.angle_denormalize(pred_x0[:, 3:])
