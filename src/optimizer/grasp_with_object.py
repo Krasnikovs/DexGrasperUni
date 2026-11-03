@@ -5,7 +5,7 @@ import torch
 import pickle
 import torch.functional as F
 from utils.handmodel import get_handmodel, ERF_loss, SPF_loss, SRF_loss
-# from einops import rearrange
+from utils.utils import HandParams
 
 class Optimizer():
 
@@ -26,6 +26,8 @@ class GraspWithObject(Optimizer):
     _NORMALIZE_UPPER = 1.
     def __init__(self, params, device, slurm: bool = False, *args, **kwargs) -> None:
         self.device = device
+
+        self.hand_params = HandParams(device=self.device)
 
         self._BATCH_SIZE = params['batch_size']
         self.scale = params['grad_scale']
@@ -113,11 +115,11 @@ class GraspWithObject(Optimizer):
             for i in range(x.shape[0] // self._BATCH_SIZE):
                 i_x_0_in =x_0[i*self._BATCH_SIZE:(i+1)*self._BATCH_SIZE, :].requires_grad_(True)
                 if self.normalize_x_trans:
-                    i_x_0_in_denorm_trans = self.trans_denormalize(i_x_0_in[:, :3])
+                    i_x_0_in_denorm_trans = self.hand_params.trans_denormalize(i_x_0_in[:, :3])
                 else:
                     i_x_0_in_denorm_trans = i_x_0_in[:, :3]
                 if self.normalize_x:
-                    i_x_0_in_denorm_angle = self.angle_denormalize(i_x_0_in[:, 3:])
+                    i_x_0_in_denorm_angle = self.hand_params.angle_denormalize(i_x_0_in[:, 3:])
                 else:
                     i_x_0_in_denorm_angle = i_x_0_in[:, 3:]
                 i_x_0_in_denorm = torch.cat([i_x_0_in_denorm_trans, i_x_0_in_denorm_angle], dim=-1)
@@ -148,22 +150,22 @@ class GraspWithObject(Optimizer):
                 x_t =  x_sample + mix_step
             return x_t
 
-    def angle_denormalize(self, joint_angle: torch.Tensor):
-        joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-        joint_angle_denorm = joint_angle_denorm * (self._joint_angle_upper - self._joint_angle_lower) + self._joint_angle_lower
-        return joint_angle_denorm
+    # def angle_denormalize(self, joint_angle: torch.Tensor):
+    #     joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
+    #     joint_angle_denorm = joint_angle_denorm * (self._joint_angle_upper - self._joint_angle_lower) + self._joint_angle_lower
+    #     return joint_angle_denorm
 
-    def trans_denormalize(self, global_trans: torch.Tensor):
-        global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-        global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
-        return global_trans_denorm
+    # def trans_denormalize(self, global_trans: torch.Tensor):
+    #     global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
+    #     global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
+    #     return global_trans_denorm
 
-    def set_joint_limits(self, lower_limit, upper_limit):
-        self._joint_angle_lower = lower_limit.to(self.device)
-        self._joint_angle_upper = upper_limit.to(self.device)
+    # def set_joint_limits(self, lower_limit, upper_limit):
+    #     self._joint_angle_lower = lower_limit.to(self.device)
+    #     self._joint_angle_upper = upper_limit.to(self.device)
 
-    def set_global_limits(self, lower_limit, upper_limit):
-        self._global_trans_lower = lower_limit.to(self.device)
-        self._global_trans_upper = upper_limit.to(self.device)
+    # def set_global_limits(self, lower_limit, upper_limit):
+    #     self._global_trans_lower = lower_limit.to(self.device)
+    #     self._global_trans_upper = upper_limit.to(self.device)

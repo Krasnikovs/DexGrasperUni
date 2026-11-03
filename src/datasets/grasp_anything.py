@@ -4,6 +4,8 @@ from torch.utils.data import Dataset, DataLoader
 import yaml
 from scipy.spatial.transform import Rotation
 
+from utils.utils import HandParams
+
 class GraspAnyting(Dataset):
 
     _joint_names = ['WRJ2', 'WRJ1', 'FFJ4', 'FFJ3', 'FFJ2', 'FFJ1', 
@@ -29,6 +31,8 @@ class GraspAnyting(Dataset):
     def __init__(self, dataset, object_nors) -> None:
         super(GraspAnyting, self).__init__()
 
+        self.hand_params = HandParams()
+
         self.len = len(dataset['metadata'])
 
         self.hand_poses = [data['translations'] for data in dataset['metadata']]
@@ -40,16 +44,16 @@ class GraspAnyting(Dataset):
         # self.joint_values = torch.tensor(self.joint_values)
         # self.hand_rotations = torch.tensor(self.hand_rotations)
 
-        grasp_config_filename = 'data/dex_hand_limits.yaml'
-        with open(grasp_config_filename, encoding="utf-8") as grasp_config_file:
-            joint_limit_yaml = yaml.load(grasp_config_file, Loader=yaml.FullLoader)
+        # grasp_config_filename = 'data/dex_hand_limits.yaml'
+        # with open(grasp_config_filename, encoding="utf-8") as grasp_config_file:
+        #     joint_limit_yaml = yaml.load(grasp_config_file, Loader=yaml.FullLoader)
 
-        self.joint_name_order_ = joint_limit_yaml['joint_names']
-        joint_min_values = dict(zip(joint_limit_yaml['joint_names'], joint_limit_yaml['urdf_joint_values']['joint_min_value']))
-        joint_max_values = dict(zip(joint_limit_yaml['joint_names'], joint_limit_yaml['urdf_joint_values']['joint_max_value']))
+        # self.joint_name_order_ = joint_limit_yaml['joint_names']
+        # joint_min_values = dict(zip(joint_limit_yaml['joint_names'], joint_limit_yaml['urdf_joint_values']['joint_min_value']))
+        # joint_max_values = dict(zip(joint_limit_yaml['joint_names'], joint_limit_yaml['urdf_joint_values']['joint_max_value']))
 
-        self._joint_angle_lower = torch.tensor([joint_min_values[f'rh_{joint}'] for joint in self._joint_names])
-        self._joint_angle_upper = torch.tensor([joint_max_values[f'rh_{joint}'] for joint in self._joint_names])
+        # self._joint_angle_lower = torch.tensor([joint_min_values[f'rh_{joint}'] for joint in self._joint_names])
+        # self._joint_angle_upper = torch.tensor([joint_max_values[f'rh_{joint}'] for joint in self._joint_names])
 
         # self._global_trans_lower = torch.tensor(joint_limit_yaml['global_lower'])
         # self._global_trans_upper = torch.tensor(joint_limit_yaml['global_upper'])
@@ -64,27 +68,27 @@ class GraspAnyting(Dataset):
     #     self._global_trans_lower = lower_limit.to(self.device)
     #     self._global_trans_upper = upper_limit.to(self.device)
 
-    def trans_normalize(self, global_trans: torch.Tensor):
-        global_trans_norm = torch.div((global_trans - self._global_trans_lower), (self._global_trans_upper - self._global_trans_lower))
-        global_trans_norm = global_trans_norm * (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) - (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        return global_trans_norm
+    # def trans_normalize(self, global_trans: torch.Tensor):
+    #     global_trans_norm = torch.div((global_trans - self._global_trans_lower), (self._global_trans_upper - self._global_trans_lower))
+    #     global_trans_norm = global_trans_norm * (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) - (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     return global_trans_norm
 
-    def trans_denormalize(self, global_trans: torch.Tensor):
-        global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-        global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
-        return global_trans_denorm
+    # def trans_denormalize(self, global_trans: torch.Tensor):
+    #     global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
+    #     global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
+    #     return global_trans_denorm
 
-    def angle_normalize(self, joint_angle: torch.Tensor):
-        joint_angle_norm = torch.div((joint_angle - self._joint_angle_lower), (self._joint_angle_upper - self._joint_angle_lower))
-        joint_angle_norm = joint_angle_norm * (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) - (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        return joint_angle_norm
+    # def angle_normalize(self, joint_angle: torch.Tensor):
+    #     joint_angle_norm = torch.div((joint_angle - self._joint_angle_lower), (self._joint_angle_upper - self._joint_angle_lower))
+    #     joint_angle_norm = joint_angle_norm * (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) - (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     return joint_angle_norm
 
-    def angle_denormalize(self, joint_angle: torch.Tensor):
-        joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-        joint_angle_denorm = joint_angle_denorm * (self._joint_angle_upper - self._joint_angle_lower) + self._joint_angle_lower
-        return joint_angle_denorm
+    # def angle_denormalize(self, joint_angle: torch.Tensor):
+    #     joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
+    #     joint_angle_denorm = joint_angle_denorm * (self._joint_angle_upper - self._joint_angle_lower) + self._joint_angle_lower
+    #     return joint_angle_denorm
 
     def __len__(self):
         return self.len
@@ -95,16 +99,16 @@ class GraspAnyting(Dataset):
         joint_values = self.joint_values[index]
         hand_rotation = self.hand_rotations[index].T
         
-        non_range = self._joint_angle_lower > joint_values
+        non_range = self.hand_params._joint_angle_lower > joint_values
         if non_range.any():
-            joint_values[non_range] = self._joint_angle_lower[non_range]
-        non_range = self._joint_angle_upper < joint_values
+            joint_values[non_range] = self.hand_params._joint_angle_lower[non_range]
+        non_range = self.hand_params._joint_angle_upper < joint_values
         if non_range.any():
-            joint_values[non_range] = self._joint_angle_upper[non_range]
+            joint_values[non_range] = self.hand_params._joint_angle_upper[non_range]
         
 
-        normalized_hand_point = self.trans_normalize(hand_point)
-        normalized_joint_values = self.angle_normalize(joint_values)
+        normalized_hand_point = self.hand_params.trans_normalize(hand_point)
+        normalized_joint_values = self.hand_params.angle_normalize(joint_values)
         hand_point_and_joints = torch.cat(
             [normalized_hand_point, normalized_joint_values], 
             dim=0).requires_grad_(True) # why combine both?? figure out if why or can saprate?

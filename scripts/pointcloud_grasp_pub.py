@@ -44,8 +44,6 @@ def numpy_to_tf2(pose = np.array([0,0,0]), quat_obj = np.array([0,0,0,1])):
         tf = TransformStamped()
 
         tf.header.stamp = rclpy.time.Time().to_msg()
-        # t.header.frame_id = 'tool0'
-        # t.child_frame_id = 'camera_depth_optical_frame'
 
         pose = pose.flatten().astype(float)
 
@@ -67,13 +65,13 @@ class TFPublisherNode(Node):
         super().__init__(node_name)
         self.tf_talker = TransformBroadcaster(self)
 
-    def write_tf(self, source_frame, target_frame, t):
+    def write_tf(self, source_frame, target_frame, tf):
 
-        t.header.frame_id = source_frame
-        t.child_frame_id = target_frame
+        tf.header.frame_id = source_frame
+        tf.child_frame_id = target_frame
         
         self.tf_talker.sendTransform(
-            t
+            tf
         )
 
 class JointStatePublisherNode(Node):
@@ -109,21 +107,18 @@ class TFSubscriberNode(Node):
     def __init__(self, node_name='tf_reader'):
         super().__init__(node_name)
 
-        # self.source_frame = source_frame
-        # self.target_frame = target_frame
-
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
     def read_tf(self, source_frame, target_frame):
         try:
-            t = self.tf_buffer.lookup_transform(
+            tf = self.tf_buffer.lookup_transform(
                 target_frame=source_frame,
                 source_frame=target_frame,
                 time=rclpy.time.Time()
             )
 
-            return tf2_to_numpy(t)
+            return tf2_to_numpy(tf)
 
         except Exception as e:
             print(f"TF not available: {e}")
@@ -161,7 +156,6 @@ def loadWeights(model, URL = './test0.pth', loadOnlyWeights = True):
         model.load_state_dict(state_dict)
     else:
         model = torch.load(URL, weights_only=loadOnlyWeights)
-    # model.eval()
     print('Model loaded')
     return model
 
@@ -176,46 +170,17 @@ def load_data(path = 'data/Realdex/Realdex'):
     print('Done loading')
     return grasp_data, object_nors
 
-def grasp_demo(model, dataloader, learning_rate = 0.0001, epoch_rate = 5, device=None):
-    print('Started grasp')
-
-    model.eval()
-    # criterion = nn.CrossEntropyLoss()
-    # dataloader = tqdm.tqdm(dataloader)
-    # _joint_angle_lower, _joint_angle_upper = utils.get_joint_
-    model.set_joint_limits(dataloader.dataset._joint_angle_lower, dataloader.dataset._joint_angle_upper)
-    for epoch in range(epoch_rate):
-        running_loss = 0.0
-        error = torch.tensor(0.0)
-        for i, data in enumerate(dataloader):
-            data = collate_fn_squeeze_pcd_batch(data)
-            for key in data:
-                if torch.is_tensor(data[key]):
-                    data[key] = data[key].to(device)
-
-            outputs = model.sample(data).squeeze(1)[:, -1, :].to(torch.float64)
-
-            outputs[:, 3:] = dataloader.dataset.angle_denormalize(joint_angle=outputs[:, 3:].cpu()).cuda()
-            outputs[:, :3] = dataloader.dataset.trans_denormalize(global_trans=outputs[:, :3].cpu()).cuda()
-
-            item_name = data['scene_id']
-            print(f'Item {item_name}')
-            print(f'Translate {outputs[:, :3]}')
-            print(f'Joints {outputs[:, 3:]}')
-
 def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'):
     print('Started grasp')
 
     model.eval()
-    # criterion = nn.CrossEntropyLoss()
-    # dataloader = tqdm.tqdm(dataloader)
     hl = HandParams()
-    _joint_angle_lower, _joint_angle_upper = hl.get_joint_limits()
-    _global_trans_lower, _global_trans_upper = hl.get_global_limits()
-    model.set_joint_limits(_joint_angle_lower, _joint_angle_upper)
-    model.set_global_limits(_global_trans_lower, _global_trans_upper)
-    model.optimizer.set_joint_limits(_joint_angle_lower, _joint_angle_upper)
-    model.optimizer.set_global_limits(_global_trans_lower, _global_trans_upper)
+    # _joint_angle_lower, _joint_angle_upper = hl.get_joint_limits()
+    # _global_trans_lower, _global_trans_upper = hl.get_global_limits()
+    # model.set_joint_limits(_joint_angle_lower, _joint_angle_upper)
+    # model.set_global_limits(_global_trans_lower, _global_trans_upper)
+    # model.optimizer.set_joint_limits(_joint_angle_lower, _joint_angle_upper)
+    # model.optimizer.set_global_limits(_global_trans_lower, _global_trans_upper)
 
     hand_point = torch.tensor(np.zeros(3))
     joint_values = torch.tensor(np.zeros(24))
@@ -243,25 +208,7 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
     object_points = np.expand_dims(np.asarray(mesh.points), axis=0)
     object_normals = np.expand_dims(np.asarray(mesh.normals), axis=0)
 
-    # object_points = np.expand_dims(np.loadtxt('data/cylinder_points.csv', delimiter=','), axis=0)
-    # object_normals = np.expand_dims(np.loadtxt('data/cylinder_normals.csv', delimiter=','), axis=0)
-
-    # rand = np.random.permutation(len(object_points.squeeze()))
-    # object_points = object_points[:,rand[:2048]]
-    # object_normals = object_normals[:,rand[:2048]]
-
     model.eps_model.set_scene_model(c = 3, num_points = object_points.shape[1])
-
-    # t_w_c = np.array([0,-0.1,0.35])
-    # q_w_c = Rotation.from_rotvec(np.array([0,0,1.2], float) * np.pi/2).as_matrix()
-    # q_w_c = q_w_c @ Rotation.from_rotvec(np.array([2.2,0,0], float) * -np.pi/2).as_matrix()
-
-    # object_rotation = Rotation.from_quat(pcd_position[1]).as_matrix()
-
-    # object_points[0] = np.einsum('mn, kn->km', object_rotation, object_points[0])
-    # object_normals[0] = np.einsum('mn, kn->km', object_rotation, object_normals[0])
-
-    # object_points[0] = object_points[0] + pcd_position[0]
 
     data = {
         'x': hand_point_joints.to(torch.float32),
@@ -326,6 +273,20 @@ if __name__ == '__main__':
         # default="/camera/camera/depth/color/points",
     )
 
+    parser.add_argument(
+        "--paramsPath",
+        default="data/all.yaml",
+    )
+
+    parser.add_argument(
+        "--model",
+        default="data/models/model_epoch_699-26_10_13.pth",
+    )
+    parser.add_argument(
+        "--item",
+        default="cylinder",
+    )
+
     args = parser.parse_args()
 
     if torch.cuda.is_available():
@@ -344,7 +305,7 @@ if __name__ == '__main__':
 
     # dataloader = torch.utils.data.DataLoader(data, batch_size=1, shuffle=True)
 
-    params = yaml.safe_load(open('data/all.yaml', 'r'))
+    params = yaml.safe_load(open(args.paramsPath, 'r'))
 
     model = UNetModel(params['UNetModel'], device).to(device)
     model = DDPM(model, False, device, params['DDPM']).to(device)
@@ -353,7 +314,7 @@ if __name__ == '__main__':
 
     load_model = True
     if load_model:
-        model = loadWeights(model, URL='data/model_epoch_699-26_10_13.pth', loadOnlyWeights=True)
+        model = loadWeights(model, URL=args.model, loadOnlyWeights=True)
 
     rclpy.init()
 
@@ -389,14 +350,16 @@ if __name__ == '__main__':
 
     object_tf = None
     object = None
-    item = 'charmander'
+    item = args.item
+    source_tf = 'world'
+    target_tf = 'obj_pcd'
 
     print(f'Subscribing to {args.pcd}')
     print(f'Publishing {args.joint_state}')
     try:
         while rclpy.ok():
             pcd_msg = pcd_node_sub.latest_msg
-            object_tf = tf_node_sub.read_tf('world', 'obj_pcd')
+            object_tf = tf_node_sub.read_tf(source_tf, target_tf)
 
             if object_tf is None:
                 rate.sleep()

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils.handmodel import get_handmodel, ERF_loss, SPF_loss, SRF_loss
+from utils.utils import HandParams
 # from models.base import DIFFUSER
 from models.schedule import make_schedule_ddpm 
 # from models.optimizer.optimizer import Optimizer
@@ -24,13 +25,18 @@ class DDPM(nn.Module):
         # self._global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427], device='cuda')
         self._NORMALIZE_LOWER = -1.
         self._NORMALIZE_UPPER = 1.
+
+        self.device = device
+
+        self.hand_params = HandParams(device=self.device)
+
         self.eps_model = eps_model
 
         self.timesteps = params['steps'] # was 100
         self.ddpm_schedule = params['schedule_cfg']
         self.rand_t_type = params['rand_t_type']
         
-        self.device = device
+        
 
         self.has_observation = has_obser # used in some task giving observation
 
@@ -150,8 +156,12 @@ class DDPM(nn.Module):
             self.sqrt_recipm1_alphas_cumprod[ts].reshape(B, *((1, ) * len(x_shape))) * output
         hand_model = get_handmodel(self.assets_file_path, batch_size = B, device = self.device)
         id_quat_rot = torch.tensor([0., 0., 0., 1.], device = self.device).view(1, 4).repeat(B, 1)
-        pred_x0[:, :3] = self.trans_denormalize(pred_x0[:, :3])
-        pred_x0[:, 3:] = self.angle_denormalize(pred_x0[:, 3:])
+
+        # pred_x0[:, :3] = self.trans_denormalize(pred_x0[:, :3])
+        # pred_x0[:, 3:] = self.angle_denormalize(pred_x0[:, 3:])
+        pred_x0[:, :3] = self.hand_params.trans_denormalize(pred_x0[:, :3])
+        pred_x0[:, 3:] = self.hand_params.angle_denormalize(pred_x0[:, 3:])
+
         pred_x0 = torch.cat([pred_x0[:, :3], id_quat_rot, pred_x0[:, 3:]], dim=-1)
         obj_pcd = data['pos'].to(self.device)
         hand_model.update_kinematics(q = pred_x0)
@@ -376,23 +386,21 @@ class DDPM(nn.Module):
             optimizer: a Optimizer object that has a gradient method
         """
         self.optimizer = optimizer
-    
-
+            
+    # def angle_denormalize(self, joint_angle: torch.Tensor):
+    #     joint_angle_upper = self._joint_angle_upper
+    #     joint_angle_lower = self._joint_angle_lower
         
-    def angle_denormalize(self, joint_angle: torch.Tensor):
-        joint_angle_upper = self._joint_angle_upper
-        joint_angle_lower = self._joint_angle_lower
-        
-        joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-        joint_angle_denorm = joint_angle_denorm * (joint_angle_upper - joint_angle_lower) + joint_angle_lower
-        return joint_angle_denorm
+    #     joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
+    #     joint_angle_denorm = joint_angle_denorm * (joint_angle_upper - joint_angle_lower) + joint_angle_lower
+    #     return joint_angle_denorm
 
-    def trans_denormalize(self, global_trans: torch.Tensor):
-        global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-        global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-        global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
-        return global_trans_denorm
+    # def trans_denormalize(self, global_trans: torch.Tensor):
+    #     global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
+    #     global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
+    #     global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
+    #     return global_trans_denorm
 
     # def save_point_cloud_with_normals(self, hand_pcd: torch.Tensor, obj_pcd: torch.Tensor, obj_normals: torch.Tensor):
     #     """

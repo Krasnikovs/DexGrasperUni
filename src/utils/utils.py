@@ -13,7 +13,7 @@ class HandParams:
     _NORMALIZE_LOWER = -1.
     _NORMALIZE_UPPER = 1.
 
-    def __init__(self):
+    def __init__(self, device = 'cpu'):
         grasp_config_filename = 'data/dex_hand_limits.yaml'
         with open(grasp_config_filename, encoding="utf-8") as grasp_config_file:
             joint_limit_yaml = yaml.load(grasp_config_file, Loader=yaml.FullLoader)
@@ -27,11 +27,13 @@ class HandParams:
         joint_min_values = dict(zip(joint_limit_yaml['joint_names'], joint_limit_yaml['urdf_joint_values']['joint_min_value']))
         joint_max_values = dict(zip(joint_limit_yaml['joint_names'], joint_limit_yaml['urdf_joint_values']['joint_max_value']))
 
-        self._joint_angle_lower = torch.tensor([joint_min_values[f'rh_{joint}'] for joint in self._joint_names])
-        self._joint_angle_upper = torch.tensor([joint_max_values[f'rh_{joint}'] for joint in self._joint_names])
+        self._joint_angle_lower = torch.tensor([joint_min_values[f'rh_{joint}'] for joint in self._joint_names]).to(device=device)
+        self._joint_angle_upper = torch.tensor([joint_max_values[f'rh_{joint}'] for joint in self._joint_names]).to(device=device)
 
-        self._global_trans_lower = torch.tensor(joint_limit_yaml['global_lower'])
-        self._global_trans_upper = torch.tensor(joint_limit_yaml['global_upper'])
+        # self._global_trans_lower = torch.tensor(joint_limit_yaml['global_lower']).to(device='cuda')
+        # self._global_trans_upper = torch.tensor(joint_limit_yaml['global_upper']).to(device='cuda')
+        self._global_trans_lower = torch.tensor([-0.13128923, -0.10665303, -0.45753425]).to(device=device)
+        self._global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427]).to(device=device)
 
     def get_joint_limits(self):
         return self._joint_angle_lower, self._joint_angle_upper
