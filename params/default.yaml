@@ -1,0 +1,171 @@
+grasp_gen_ur:
+  lr: 1e-4
+  eval_interval: 1
+  eval_visualize: 1
+
+  train:
+    batch_size: 128
+    num_workers: 0
+    epochs: 3000 #3000 for small dataset, 100 for large dataset(1M+)
+    log_step: 100
+
+  test:
+    epoch: null
+    batch_size: 32
+    num_workers: 0
+
+  dataset:
+    use_llm: false
+    name: ${dataset.active}  # Reference global configuration
+    desc: '[${dataset.active} ShadowHand] -- dataset used for grasp pose generation'
+    normalize_x: true
+    normalize_x_trans: true
+    modeling_keys: ['allDoFs']
+    num_points: 2048
+    frame_interval_train: 5
+    frame_interval_test: 10
+    device: cuda
+    use_color: false
+    use_normal: true
+    is_downsample: true
+    train_transforms: ['NumpyToTensor']
+    test_transforms: ['NumpyToTensor']
+    transform_cfg: {}
+    # asset_dir: ${dataset.paths.${dataset.active}.asset_dir}
+    # asset_dir_slurm: ${dataset.paths.${dataset.active}.asset_dir_slurm}
+
+  visualizer:
+    name: GraspGenURVisualizer
+    ksample: ${grasp_gen_ur.test.batch_size} # sample k case in each case
+    vis_denoising: false # visualize denoising process
+    visualize: false
+    visualize_html: false
+    interval: 1
+    use_llm: False
+    datasetname: ${grasp_gen_ur.dataset.name}
+
+DDPM:
+  steps: 100
+  schedule_cfg:
+    beta: [0.0001, 0.01]
+    beta_schedule: 'linear'
+    s: 0.008
+  opt_interval: 1 # 
+  rand_t_type: 'half' # 'half' or 'all'
+  loss_type: 'l1' # 'l1' or 'l2'
+
+  urdf_assets_file: "/home/gustavskrasnikovs/repos/off_shute/src/graspany-addapt/assets/urdf/urdf_assets_meta.json"
+
+  sample:
+    use_dpmsolver: false # Whether to use dpmsolver++ for sampling
+    name: 'dpmsolver++' # Specifies dpmsolver++ as the sampling algorithm
+    steps: 500 # The total number of function evaluations (NFE), i.e., the number of time steps in the sampling process
+    order: 1 # The order of the sampling algorithm, 1 refers to DDIM, 2 means dpmsolver++ uses second-order sampling，3 means dpmsolver++ uses third-order sampling
+    skip_type: 'time_quadratic' # The type for the spacing of the time steps. 'time_uniform' or 'logSNR' or 'time_quadratic'.
+    t_start: 1  # dpmsolver++ only supports inputs in continuous time, this sets the starting time for sampling at t = 1
+    t_end: 0.01  # The end time for sampling, near 0, representing the terminal state of the diffusion process
+    method: 'multistep'  #The method for sampling. 'singlestep' or 'multistep' or 'singlestep_fixed' or 'adaptive'.
+
+UNetModel:
+  d_x: 27 # placeholder
+  d_model: 512
+  time_embed_mult: 2
+  nblocks: 4
+  transformer_depth: 1
+
+  # nblocks: 8
+  # transformer_depth: 4
+
+  # nblocks: 12
+  # transformer_depth: 6
+
+  # nblocks: 16
+  # transformer_depth: 4 
+
+  resblock_dropout: 0.0
+
+  transformer_num_heads: 8
+  transformer_dim_head: 64
+  transformer_dropout: 0.1
+  transformer_mult_ff: 2
+  context_dim: 512
+  use_position_embedding: false # for input x
+
+  # scene_model:
+  #   name: PointNet2
+  #   use_color: ${task.dataset.use_color}
+  #   use_normal: ${task.dataset.use_normal}
+  #   num_points: ${task.dataset.num_points}
+  #   num_tokens: 8
+  #   pretrained_weights: null
+  #   pretrained_weights_slurm: null
+  # freeze_scene_model: false
+  scene_model:
+    name: PointTransformer
+    use_color: ${grasp_gen_ur.dataset.use_color}
+    use_normal: ${grasp_gen_ur.dataset.use_normal}
+    num_points: ${grasp_gen_ur.dataset.num_points}
+    pretrained_weights: null
+    pretrained_weights_slurm: null
+  freeze_scene_model: false
+  use_llm: False
+
+grasp_with_object:
+  guidance_scale: 1
+  grad_scale: 0.1 ####need to be tuned
+
+  clip_grad_by_value:
+    min: -0.1
+    max: 0.1
+  loss_weights:
+    SRF_loss: 2.0
+    SPF_loss: 2.0
+    ERF_loss: 0.3
+  asset_dir: ${task.dataset.asset_dir}
+  asset_dir_slurm: ${task.dataset.asset_dir_slurm}
+
+  batch_size: 1
+  # modeling_keys: ['allDoFs']
+
+  normalize_x: true
+  normalize_x_trans: true
+  
+  urdf_assets_file: "/home/gustavskrasnikovs/repos/off_shute/src/graspany-addapt/assets/urdf/urdf_assets_meta.json"
+
+# hydra:
+#   run:
+#     dir: ${exp_dir}
+#   output_subdir: null
+
+defaults:
+  - _self_
+  - diffuser: ddpm
+  - model: unet_grasp
+  - task: grasp_gen_ur
+  - optimizer: null
+
+
+exp_name: default
+output_dir: outputs
+# exp_dir: ${output_dir}/${now:%Y-%m-%d_%H-%M-%S}_${exp_name}
+# tb_dir: ${exp_dir}/tb_logs
+# vis_dir: ${exp_dir}/visual
+# ckpt_dir: ${exp_dir}/ckpts
+
+slurm: false
+gpu: 0
+
+## for saving model
+save_model_interval: 1
+save_model_seperately: true
+save_scene_model: true # save scene model or not, important!!!
+
+# Global LLM switch
+llm:
+  enabled: false  # Master switch for all LLM features
+  
+# sampling
+use_dpmsolver: false # Whether to use dpmsolver++ for sampling
+
+dataset:
+  active: real_dex

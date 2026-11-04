@@ -25,6 +25,9 @@ class HandModel:
         self.robot = pk.build_chain_from_urdf(open(urdf_filename).read()).to(dtype=torch.float, device=self.device)
         self.robot_full = URDF_PARSER.URDF.from_xml_file(urdf_filename)
         
+        ####
+        #### replace these key points with collision model pointcloud with sim used models
+        ####
         self.dis_key_point = {
         "palm": [],
         "ffproximal": [[-0.0002376327756792307, -0.009996689856052399, 0.038666076958179474], [-0.0035445429384708405, -0.009337972849607468, 4.728326530312188e-05], [0.0042730518616735935, -0.0090293288230896, 0.018686404451727867], [-0.003900623880326748, -0.009198302403092384, 0.027359312400221825], [-0.0034948040265589952, -0.009357482194900513, 0.011004473082721233], [0.004485304467380047, -0.008933592587709427, 0.005608899053186178], [0.00421907939016819, -0.009053671732544899, 0.030992764979600906], [-0.003979427739977837, -0.009167392738163471, 0.01910199038684368], [-0.0037133553996682167, -0.009271756745874882, 0.04499374330043793], [0.0034797703847289085, -0.009367110207676888, 0.044556595385074615]],
@@ -79,6 +82,10 @@ class HandModel:
             "thdistal": [[0, 0, 0.0275]],
             "thtip":[]
         }
+        ####
+        ####
+        ####
+
         self.link_face_verts = {}
         # prepare geometries for visualization
         self.global_translation = None
@@ -102,7 +109,8 @@ class HandModel:
         else:
             raise NotImplementedError
 
-        for i_link, link in enumerate(visual.links):
+        for i_link, link in enumerate(visual.links): # could replase these with shadow robot mujoco models collisions
+                                                    # should try and find model for gazebo
             # print(f"Processing link #{i_link}: {link.name}")
             # load mesh
             if len(link.visuals) == 0:

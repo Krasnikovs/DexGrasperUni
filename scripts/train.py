@@ -166,7 +166,7 @@ if __name__ == '__main__':
     if load_model:
         model = loadWeights(model, URL=args.modelLoadPath, loadOnlyWeights=True)
 
-        model = train(model, dataloader, device=device, model_URL=args.modelSavePath, epoch_rate=train_params['train']['epoch'], learning_rate=float(train_params['lr']))
+    model = train(model, dataloader, device=device, model_URL=args.modelSavePath, epoch_rate=train_params['train']['epochs'], learning_rate=float(train_params['lr']))
     
     saveWeights(model, URL=args.modelSavePath, saveStateOnly=True)
     print('done')

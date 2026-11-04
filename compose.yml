@@ -1,0 +1,48 @@
+services:
+  ros2:
+    build: ./
+      # context: .
+    #   args:
+    #     USERNAME: ros2user
+    #     USER_UID: ${UID:-1000}
+    #     USER_GID: ${GID:-1000}
+    image: grasper-container
+    container_name: grasper-workspace
+    network_mode: host
+    ipc: host
+    pid: host
+    stdin_open: true
+    tty: true
+    # user: ros2user
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: 'nvidia'
+            count: 1
+            capabilities: [gpu]
+
+    environment:
+      - ROS_DOMAIN_ID=42
+      - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+      - DISPLAY=$DISPLAY
+      - LIBGL_ALWAYS_SOFTWARE=1
+      - NVIDIA_VISIBLE_DEVICES=1
+
+    volumes:
+      # Workspace with persistent build cache
+      # - workspace:/home/$USERNAME
+
+      # Source code overlays on top
+      # - ./src:/home/ws/src
+
+      # X11 for GUI applications
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    command: /usr/bin/terminator
+
+volumes:
+  workspace:
