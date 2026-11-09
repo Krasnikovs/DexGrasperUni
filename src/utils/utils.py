@@ -13,9 +13,9 @@ class HandParams:
     _NORMALIZE_LOWER = -1.
     _NORMALIZE_UPPER = 1.
 
-    def __init__(self, device = 'cpu'):
-        grasp_config_filename = 'data/dex_hand_limits.yaml'
-        with open(grasp_config_filename, encoding="utf-8") as grasp_config_file:
+    def __init__(self, hand_info_path = 'params/sr_dex_hand_limits.yaml', device = 'cpu'):
+        
+        with open(hand_info_path, encoding="utf-8") as grasp_config_file:
             joint_limit_yaml = yaml.load(grasp_config_file, Loader=yaml.FullLoader)
 
         self._joint_names = ['WRJ2', 'WRJ1', 'FFJ4', 'FFJ3', 'FFJ2', 'FFJ1', 

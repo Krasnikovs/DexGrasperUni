@@ -54,7 +54,7 @@ DDPM:
   rand_t_type: 'half' # 'half' or 'all'
   loss_type: 'l1' # 'l1' or 'l2'
 
-  urdf_assets_file: "/home/gustavskrasnikovs/repos/off_shute/src/graspany-addapt/assets/urdf/urdf_assets_meta.json"
+  urdf_assets_file: "assets/urdf/urdf_assets_meta.json"
 
   sample:
     use_dpmsolver: false # Whether to use dpmsolver++ for sampling
@@ -130,7 +130,7 @@ grasp_with_object:
   normalize_x: true
   normalize_x_trans: true
   
-  urdf_assets_file: "/home/gustavskrasnikovs/repos/off_shute/src/graspany-addapt/assets/urdf/urdf_assets_meta.json"
+  urdf_assets_file: "assets/urdf/urdf_assets_meta.json"
 
 # hydra:
 #   run:

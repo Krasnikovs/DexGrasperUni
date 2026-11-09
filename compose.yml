@@ -13,7 +13,7 @@ services:
     pid: host
     stdin_open: true
     tty: true
-    # user: ros2user
+    user: ros2user
     deploy:
       resources:
         reservations:
@@ -42,6 +42,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+    # command: sleep infinity
     command: /usr/bin/terminator
 
 volumes:

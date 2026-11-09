@@ -54,8 +54,8 @@ def load_data(path = 'data/Realdex/Realdex'):
 
     object_pcds = pickle.load(open(scene_path, 'rb'))
 
-    with open("data/item_list.txt", "w") as file:
-        file.writelines(line + '\n' for line in list(object_pcds.keys()))
+    # with open("data/item_list.txt", "w") as file:
+    #     file.writelines(line + '\n' for line in list(object_pcds.keys()))
 
     grasp_data = torch.load(data_path, weights_only=False)
 
@@ -117,12 +117,12 @@ if __name__ == '__main__':
 
     parser.add_argument(
         "--trainData",
-        default="/home/gustavskrasnikovs/repos/off_shute/data/Realdex/Realdex",
+        default="datasets/Realdex/Realdex",
     )
 
     parser.add_argument(
         "--paramsPath",
-        default="data/dex_hand_params/all.yaml",
+        default="params/default.yaml",
     )
 
     parser.add_argument(

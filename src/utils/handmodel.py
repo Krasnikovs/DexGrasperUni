@@ -109,6 +109,8 @@ class HandModel:
         else:
             raise NotImplementedError
 
+        o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
+
         for i_link, link in enumerate(visual.links): # could replase these with shadow robot mujoco models collisions
                                                     # should try and find model for gazebo
             # print(f"Processing link #{i_link}: {link.name}")
@@ -206,19 +208,19 @@ class HandModel:
             self.global_translation = q[:, :3]
             self.global_rotation = torch.tensor(np.identity(3)).view(1,3,3).repeat(q.shape[0],1,1).to(device=self.device, dtype=torch.float32)
             self.current_status = self.robot.forward_kinematics(q[:, 3:])
-        elif q.shape[1] == 3+22:#3+22
+        elif q.shape[1] == 3+22:
             self.global_translation = q[:, :3]
             self.global_rotation = torch.tensor(np.identity(3)).view(1,3,3).repeat(q.shape[0],1,1).to(device=self.device, dtype=torch.float32)
-            expanded_joint_data = torch.cat([torch.zeros((q.shape[0], 2), device=q.device), q[:, 3:]], dim=1)#00+22
+            expanded_joint_data = torch.cat([torch.zeros((q.shape[0], 2), device=q.device), q[:, 3:]], dim=1)
             self.current_status = self.robot.forward_kinematics(expanded_joint_data)
 
-        elif q.shape[1] == 3+4+22:#3+6+22
+        elif q.shape[1] == 3+4+22:
             self.global_translation = q[:, :3]
             self.global_rotation = torch.tensor(Rotation.from_quat(q[:, 3:7].cpu().detach().numpy()).as_matrix()).to(device=self.device, dtype=torch.float32)
-            expanded_joint_data = torch.cat([torch.zeros((q.shape[0], 2), device=q.device), q[:, -22:]], dim=1)#00+22
+            expanded_joint_data = torch.cat([torch.zeros((q.shape[0], 2), device=q.device), q[:, -22:]], dim=1)
             self.current_status = self.robot.forward_kinematics(expanded_joint_data)
 
-        else:# 3+6+24
+        else:# 3+4+24
             self.global_translation = q[:, :3]
             self.global_rotation = torch.tensor(Rotation.from_quat(q[:, 3:7].cpu().detach().numpy()).as_matrix()).to(device=self.device, dtype=torch.float32)
             self.current_status = self.robot.forward_kinematics(q[:, -24:])
