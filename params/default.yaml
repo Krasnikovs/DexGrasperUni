@@ -59,12 +59,12 @@ DDPM:
   sample:
     use_dpmsolver: false # Whether to use dpmsolver++ for sampling
     name: 'dpmsolver++' # Specifies dpmsolver++ as the sampling algorithm
-    steps: 500 # The total number of function evaluations (NFE), i.e., the number of time steps in the sampling process
+    steps: 250 # The total number of function evaluations (NFE), i.e., the number of time steps in the sampling process
     order: 1 # The order of the sampling algorithm, 1 refers to DDIM, 2 means dpmsolver++ uses second-order sampling，3 means dpmsolver++ uses third-order sampling
-    skip_type: 'time_quadratic' # The type for the spacing of the time steps. 'time_uniform' or 'logSNR' or 'time_quadratic'.
+    skip_type: 'time_uniform' # The type for the spacing of the time steps. 'time_uniform' or 'logSNR' or 'time_quadratic'.
     t_start: 1  # dpmsolver++ only supports inputs in continuous time, this sets the starting time for sampling at t = 1
     t_end: 0.01  # The end time for sampling, near 0, representing the terminal state of the diffusion process
-    method: 'multistep'  #The method for sampling. 'singlestep' or 'multistep' or 'singlestep_fixed' or 'adaptive'.
+    method: 'singlestep'  #The method for sampling. 'singlestep' or 'multistep' or 'singlestep_fixed' or 'adaptive'.
 
 UNetModel:
   d_x: 27 # placeholder
@@ -118,9 +118,9 @@ grasp_with_object:
     min: -0.1
     max: 0.1
   loss_weights:
-    SRF_loss: 2.0
-    SPF_loss: 2.0
-    ERF_loss: 0.3
+    SRF_loss: 1.0
+    SPF_loss: 1.0
+    ERF_loss: 0.6
   asset_dir: ${task.dataset.asset_dir}
   asset_dir_slurm: ${task.dataset.asset_dir_slurm}
 

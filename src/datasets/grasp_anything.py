@@ -21,8 +21,8 @@ class GraspAnyting(Dataset):
     #                                    0.6981317, 0.43633232, 1.5707964,  1.5707964, 1.5707964, 1.047, 1.309, 0.2618,
     #                                    0.5237, 1.])
 
-    _global_trans_lower = torch.tensor([-0.13128923, -0.10665303, -0.45753425])
-    _global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427])
+    # _global_trans_lower = torch.tensor([-0.13128923, -0.10665303, -0.45753425])
+    # _global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427])
 
 
     _NORMALIZE_LOWER = -1.
@@ -118,11 +118,11 @@ class GraspAnyting(Dataset):
 
         rand_rot = Rotation.random().as_matrix()
 
-        # object_points_trans = np.einsum('mn, kn->km', hand_rotation, geo_v_and_v_norm[:,:3])
-        # vertex_normal = np.einsum('mn, kn->km', hand_rotation, geo_v_and_v_norm[:,3:])
+        object_points_trans = np.einsum('mn, kn->km', hand_rotation, geo_v_and_v_norm[:,:3])
+        vertex_normal = np.einsum('mn, kn->km', hand_rotation, geo_v_and_v_norm[:,3:])
 
-        object_points_trans = np.einsum('mn, kn->km', rand_rot, geo_v_and_v_norm[:,:3])
-        vertex_normal = np.einsum('mn, kn->km', rand_rot, geo_v_and_v_norm[:,3:])
+        # object_points_trans = np.einsum('mn, kn->km', rand_rot, geo_v_and_v_norm[:,:3])
+        # vertex_normal = np.einsum('mn, kn->km', rand_rot, geo_v_and_v_norm[:,3:])
 
         cam_tran = None
 
@@ -142,7 +142,7 @@ class GraspAnyting(Dataset):
             # 'cam_tran': cam_tran, # camera pose, but empty?
             'scene_id': item, # object name
             'normal': vertex_normal, # ?? this could be an objects mesh points
-            'offset': 1
+            # 'offset': 1
         }
 
         feat = np.concatenate([vertex_normal], axis=-1)

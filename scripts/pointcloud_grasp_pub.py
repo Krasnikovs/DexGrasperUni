@@ -257,7 +257,7 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         prog="get_data",
-        usage="get_data.py [--joint_state JOINT_STATE] [--pcd PCD] [--tf]",
+        usage="get_data.py [--joint_state JOINT_STATE] [--paramsPath PARAMSPATH] [--model MODEL] [--item ITEM]",
     )
 
     parser.add_argument(
@@ -275,12 +275,12 @@ if __name__ == '__main__':
 
     parser.add_argument(
         "--paramsPath",
-        default="data/all.yaml",
+        default="params/default.yaml",
     )
 
     parser.add_argument(
         "--model",
-        default="data/models/model_epoch_699-26_10_13.pth",
+        default="models/example/model_epoch_699-26_10_13.pth",
     )
     parser.add_argument(
         "--item",

@@ -30,8 +30,8 @@ class HandParams:
         self._joint_angle_lower = torch.tensor([joint_min_values[f'rh_{joint}'] for joint in self._joint_names]).to(device=device)
         self._joint_angle_upper = torch.tensor([joint_max_values[f'rh_{joint}'] for joint in self._joint_names]).to(device=device)
 
-        # self._global_trans_lower = torch.tensor(joint_limit_yaml['global_lower']).to(device='cuda')
-        # self._global_trans_upper = torch.tensor(joint_limit_yaml['global_upper']).to(device='cuda')
+        # self._global_trans_lower = torch.tensor(joint_limit_yaml['global_lower']).to(device=device)
+        # self._global_trans_upper = torch.tensor(joint_limit_yaml['global_upper']).to(device=device)
         self._global_trans_lower = torch.tensor([-0.13128923, -0.10665303, -0.45753425]).to(device=device)
         self._global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427]).to(device=device)
 

@@ -10,7 +10,7 @@ import pytorch_kinematics as pk
 import urdf_parser_py.urdf as URDF_PARSER
 from urdf_parser_py.urdf import (URDF, Box, Cylinder, Mesh, Sphere)
 from pytorch3d.ops import knn_points
-import pointops
+# import pointops
 
 class HandModel:
     def __init__(self, robot_name, urdf_filename, mesh_path,
