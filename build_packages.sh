@@ -18,6 +18,6 @@ FORCE_CUDA=1 TORCH_CUDA_ARCH_LIST=$CUDA_COMPUTE_CAPABILITY .venv/bin/pip install
 .venv/bin/pip install --no-build-isolation -e ./submodules/urdf_parser_py
 
 echo "Building src"
-.venv/bin/pip install -e ./
+.venv/bin/pip install --no-build-isolation -e ./
 
 echo "Completed building and installing"

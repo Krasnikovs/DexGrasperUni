@@ -10,7 +10,7 @@ import pytorch_kinematics as pk
 import urdf_parser_py.urdf as URDF_PARSER
 from urdf_parser_py.urdf import (URDF, Box, Cylinder, Mesh, Sphere)
 from pytorch3d.ops import knn_points
-# import pointops
+import pointops
 
 class HandModel:
     def __init__(self, robot_name, urdf_filename, mesh_path,
@@ -86,23 +86,23 @@ class HandModel:
         ####
         ####
 
-        self.link_face_verts = {}
+        # self.link_face_verts = {}
         # prepare geometries for visualization
         self.global_translation = None
         self.global_rotation = None
-        self.softmax = torch.nn.Softmax(dim=-1)
+        # self.softmax = torch.nn.Softmax(dim=-1)
         # prepare contact point basis and surface point samples
         self.surface_points = {}
         self.surface_points_normal = {}
         visual = URDF.from_xml_string(open(urdf_filename).read())
-        self.mesh_verts = {}
-        self.mesh_faces = {}
+        # self.mesh_verts = {}
+        # self.mesh_faces = {}
 
-        self.canon_verts = []
-        self.canon_faces = []
-        self.idx_vert_faces = []
-        self.face_normals = []
-        verts_bias = 0
+        # self.canon_verts = []
+        # self.canon_faces = []
+        # self.idx_vert_faces = []
+        # self.face_normals = []
+        # verts_bias = 0
 
         if robot_name == 'shadowhand':
             self.palm_toward = torch.tensor([0., -1., 0., 0.], device=self.device).reshape(1, 1, 4).repeat(self.batch_size, 1, 1)
@@ -204,6 +204,10 @@ class HandModel:
         self.scale = hand_scale
 
     def update_kinematics(self, q):
+        # global_translation = q[:,:3]
+        # global_rotation = q[:,:3] could implement like this
+        # global_joints = q[:, -24:]
+
         if q.shape[1] == 3+24:
             self.global_translation = q[:, :3]
             self.global_rotation = torch.tensor(np.identity(3)).view(1,3,3).repeat(q.shape[0],1,1).to(device=self.device, dtype=torch.float32)
@@ -228,7 +232,7 @@ class HandModel:
     def get_keypoints(self, q=None, downsample=True):
         if q is not None:
             self.update_kinematics(q)
-        keypoints = [
+        keypoints = [ # look at this, this may could have been just matrix * matrix
             self.current_status[link_name].transform_points(torch.tensor(self.keypoints[link_name], device=self.device, dtype=torch.float32)).expand(self.batch_size, -1, -1)
             for link_name in self.keypoints if len(self.keypoints[link_name]) > 0]
         keypoints = torch.cat(keypoints, dim=1)
@@ -238,7 +242,7 @@ class HandModel:
     def get_dis_keypoints(self, q=None, downsample=True):
         if q is not None:
             self.update_kinematics(q)
-        dis_points = [
+        dis_points = [ # look at this, this may could have been just matrix * matrix
             self.current_status[link_name].transform_points(torch.tensor(self.dis_key_point[link_name], device=self.device, dtype=torch.float32)).expand(self.batch_size, -1, -1)
             for link_name in self.dis_key_point if len(self.dis_key_point[link_name]) > 0]
         dis_points = torch.cat(dis_points, dim=1)
@@ -250,11 +254,12 @@ class HandModel:
         if q is not None:
             self.update_kinematics(q)
         surface_points = []
+        exluded_links = ['forearm', 'wrist']
 
         for link_name in self.surface_points:
             # for link_name in parts:
             # get transformation
-            if link_name  in ['forearm']:
+            if link_name in exluded_links:
                 continue
             trans_matrix = self.current_status[link_name].get_matrix()
             surface_points.append(
@@ -300,28 +305,67 @@ def ERF_loss(obj_pcd_nor: torch.Tensor, hand_pcd: torch.Tensor):
     # h[:] = hand_pcd[0]
     # o[:] = obj_pcd[0]
 
-    # knn_result = pointops.knn_query(nsample=1, new_xyz=hand_pcd[0], xyz=obj_pcd[0].contiguous(), new_offset=torch.tensor(hand_pcd.shape[1], device=hand_pcd.device), offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device))
+    # knn_result = pointops.knn_query(nsample=1, new_xyz=hand_pcd[0].contiguous(), xyz=obj_pcd[0].contiguous(), new_offset=torch.tensor(hand_pcd.shape[1], device=hand_pcd.device), offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device))
     # distances = knn_result[1].unsqueeze(0)
     # indices = knn_result[0].unsqueeze(0)
 
+    # obj_pcd_grouping = pointops.grouping2(obj_pcd[0].contiguous(), indices.int())
+    # obj_nor_grouping = pointops.grouping2(obj_nor[0].contiguous(), indices.int())
+
+    # hand_obj_signs = ((obj_pcd_grouping - hand_pcd) * obj_nor_grouping).sum(dim=2)
     # knn = knn_result.knn
-    # distances = distances.sqrt()
-    # Extract the closest object points and normals
+    distances = distances.sqrt()
+    # # Extract the closest object points and normals
     hand_obj_points = torch.gather(obj_pcd, 1, indices.expand(-1, -1, 3))
     hand_obj_normals = torch.gather(obj_nor, 1, indices.expand(-1, -1, 3))
     # Compute the signs
     hand_obj_signs = ((hand_obj_points - hand_pcd) * hand_obj_normals).sum(dim=2)
-    hand_obj_signs = (hand_obj_signs > 0.).float()
+    
+    hand_obj_signs = (hand_obj_signs > 0.)
+    collision_value = distances.squeeze(2)[hand_obj_signs]
+
+    # hand_obj_signs = (hand_obj_signs > 0.).float()
     # Compute collision value
     # collision_value = (hand_obj_signs * hand_obj_dist).mean(dim=1)
-    collision_value = (hand_obj_signs * distances.squeeze(2)).max(dim=1).values
+    # collision_value = (hand_obj_signs * distances.squeeze(2)).max(dim=1).values
     ERF_loss = collision_value.mean()
+    # ERF_loss = torch.abs(hand_obj_signs).mean()
+    return ERF_loss
+
+def ERF_loss_(obj_pcd_nor: torch.Tensor, hand_pcd: torch.Tensor):
+    """
+    Calculate the penalty loss based on point cloud and normal.
+
+    :param obj_pcd_nor: B x N_obj x 6 (object point cloud with normals)
+    :param hand_pcd: B x N_hand x 3 (hand point cloud)
+    :return: ERF_loss (scalar)
+    """
+    # b = hand_pcd.shape[0]
+    # n_obj = obj_pcd_nor.shape[1]
+    # n_hand = hand_pcd.shape[1]
+
+    # Separate object point cloud and normals
+    obj_pcd = obj_pcd_nor[:, :, :3]
+    obj_nor = obj_pcd_nor[:, :, 3:6]
+
+    knn_result = pointops.knn_query(nsample=1, new_xyz=hand_pcd[0].contiguous(), xyz=obj_pcd[0].contiguous(), new_offset=torch.tensor(hand_pcd.shape[1], device=hand_pcd.device), offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device))
+    distances = knn_result[1].unsqueeze(0)
+    indices = knn_result[0].unsqueeze(0)
+
+    obj_pcd_grouping = pointops.grouping2(obj_pcd[0].contiguous(), indices.int())
+    obj_nor_grouping = pointops.grouping2(obj_nor[0].contiguous(), indices.int())
+
+    hand_obj_signs = ((obj_pcd_grouping - hand_pcd) * obj_nor_grouping).sum(dim=2)
+    # hand_obj_signs = (hand_obj_signs > 0.).float()
+    # collision_value = (hand_obj_signs * distances.squeeze(2)).max(dim=1).values
+    ERF_loss = torch.abs(hand_obj_signs).mean() # what did this do? 
     return ERF_loss
 
 def SPF_loss(dis_points, obj_pcd: torch.Tensor, thres_dis = 0.02 ):
     dis_points = dis_points.to(dtype=torch.float32)
-    obj_pcd = obj_pcd.to(dtype=torch.float32)
-    dis_pred = knn_points(dis_points, obj_pcd).dists[:, :, 0] # 64*140  # squared chamfer distance from object_pc to contact_candidates_pred
+    # obj_nor = obj_pcd[:, :, 3:].to(dtype=torch.float32)
+    obj_pcd = obj_pcd[:, :, :3].to(dtype=torch.float32)
+    # dis_pred = knn_points(dis_points, obj_pcd).dists[:, :, 0] # 64*140  # squared chamfer distance from object_pc to contact_candidates_pred
     
     # dis_pred = pointops.knn_query(
     #     nsample=1, 
@@ -330,9 +374,26 @@ def SPF_loss(dis_points, obj_pcd: torch.Tensor, thres_dis = 0.02 ):
     #     new_offset=torch.tensor(dis_points.shape[1], device=dis_points.device), 
     #     offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device)
     # )[1].reshape(1,140)
+    knn_result = pointops.knn_query(
+        nsample=1, 
+        new_xyz=dis_points[0].contiguous(), 
+        xyz=obj_pcd[0].contiguous(), 
+        new_offset=torch.tensor(dis_points.shape[1], device=dis_points.device), 
+        offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device)
+        )
+    
+    indices = knn_result[0].unsqueeze(0)
+    
+    obj_pcd_grouping = pointops.grouping2(obj_pcd[0].contiguous(), indices.int())
+    # obj_con_point_dist = (obj_pcd_grouping - dis_points).sum(dim=2).abs()
+    obj_con_point_dist = torch.linalg.norm(obj_pcd_grouping - dis_points, dim=2)
+    mask = obj_con_point_dist < thres_dis
+    # maybe look if these are negative
 
-    small_dis_pred = dis_pred < thres_dis ** 2# 64*140
-    SPF_loss = dis_pred[small_dis_pred].sqrt().sum() / (small_dis_pred.sum().item() + 1e-5)#1
+    SPF_loss = obj_con_point_dist[mask].mean()
+
+    # small_dis_pred = dis_pred < thres_dis ** 2# 64*140
+    # SPF_loss = dis_pred[small_dis_pred].sqrt().sum() / (small_dis_pred.sum().item() + 1e-5)#1
     # SPF_loss = dis_pred[small_dis_pred].sum() / (small_dis_pred.sum().item() + 1e-5)
     return SPF_loss
 

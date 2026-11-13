@@ -1,5 +1,0 @@
-Metadata-Version: 2.4
-Name: dex_project_utils
-Version: 0.1.0
-Requires-Python: >=3.10
-Requires-Dist: numpy==2.2.6

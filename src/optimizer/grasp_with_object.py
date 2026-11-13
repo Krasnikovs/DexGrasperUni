@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import pickle
 import torch.functional as F
-from utils.handmodel import get_handmodel, ERF_loss, SPF_loss, SRF_loss
+from utils.handmodel import get_handmodel, ERF_loss, SPF_loss, SRF_loss, ERF_loss_
 from utils.utils import HandParams
 
 class Optimizer():
@@ -67,9 +67,9 @@ class GraspWithObject(Optimizer):
         obj_pcd = torch.func.rearrange(obj_pcd, '(b n) c -> b n c', b=self._BATCH_SIZE, n=normal.shape[1])
 
         obj_pcd_nor = torch.cat((obj_pcd, normal), dim=-1).to(dtype=torch.float32)
-        ERF_loss_value = ERF_loss(obj_pcd_nor, hand_pcd)
+        ERF_loss_value = ERF_loss_(obj_pcd_nor, hand_pcd)
         dis_keypoint = self.hand_model.get_dis_keypoints(q= x)
-        SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd)
+        SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd_nor)
         hand_keypoint = self.hand_model.get_keypoints(q= x)
         SRF_loss_value = SRF_loss(hand_keypoint)
         return  self.weight_SRF_loss * SRF_loss_value  + self.weight_SPF_loss * SPF_loss_value + self.weight_ERF_loss * ERF_loss_value
