@@ -1,0 +1,8 @@
+{
+    "urdf_path": {
+        "shadowhand": "assets/sr_description/mujoco_models/urdfs/shadowhand_motor_plus.urdf"
+    },
+    "meshes_path": {
+        "shadowhand": "assets/sr_description/mujoco_models/meshes"
+    }
+}

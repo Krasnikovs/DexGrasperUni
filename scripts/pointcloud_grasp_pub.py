@@ -196,14 +196,16 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
     hand_rotation = np.expand_dims(Rotation.from_quat(np.array([0, 0, 0, 1]), scalar_first=False).as_matrix(),0)
     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
     mesh = o3d.geometry.PointCloud()
-    mesh.points = o3d.utility.Vector3dVector(pcd)
+    mesh.points = o3d.utility.Vector3dVector(pcd[:,:3])
+    mesh.normals = o3d.utility.Vector3dVector(pcd[:,3:])
     # mesh = mesh.random_down_sample(0.5)
     T_w_o = np.identity(4)
     T_w_o[:3,3:] = pcd_position[0].reshape(3,1)
     object_rotation = Rotation.from_quat(pcd_position[1]).as_matrix()
     T_w_o[:3,:3] = object_rotation
     mesh.transform(T_w_o)
-    mesh.estimate_normals(fast_normal_computation = False)
+    # mesh.normals = o3d.utility.Vector3dVector(pcd[:,3:])
+    # mesh.estimate_normals(fast_normal_computation = False)
 
     object_points = np.expand_dims(np.asarray(mesh.points), axis=0)
     object_normals = np.expand_dims(np.asarray(mesh.normals), axis=0)
@@ -224,25 +226,31 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
         if torch.is_tensor(data[key]):
             data[key] = data[key].to(device)
 
-    outputs = model.sample(data).squeeze(1)[:, -1, :].to(torch.float64)
+    outputs = model.sample(data)
+    output = outputs.squeeze(1)[:, -1, :].to(torch.float64)
 
-    outputs[:, 3:] = hl.angle_denormalize(joint_angle=outputs[:, 3:].cpu()).to(device)
-    outputs[:, :3] = hl.trans_denormalize(global_trans=outputs[:, :3].cpu()).to(device)
+    output[:, 3:] = hl.angle_denormalize(joint_angle=output[:, 3:].cpu()).to(device)
+    output[:, :3] = hl.trans_denormalize(global_trans=output[:, :3].cpu()).to(device)
 
-    model.optimizer.hand_model.get_keypoints(outputs.to(torch.float32))
+    # model.optimizer.hand_model.get_keypoints(outputs.to(torch.float32))
     predicted_links = model.optimizer.hand_model.current_status
     predicted_link_tips = [[link, predicted_links[link]._matrix[:,:3,3:]] for link in predicted_links if link.find('tip') != -1]
 
-    pred_hand_point = outputs[:, :3].cpu().detach().numpy().flatten()
-    pred_hand_joints = outputs[:, 3:].cpu().detach().numpy().flatten()
+    pred_hand_point = output[:, :3].cpu().detach().numpy().flatten()
+    pred_hand_joints = output[:, 3:].cpu().detach().numpy().flatten()
 
-    hand_points = model.optimizer.hand_model.get_surface_points(outputs.to(torch.float32))
+    contact_points = model.optimizer.hand_model.get_dis_keypoints()
+    hand_points = model.optimizer.hand_model.get_surface_points(output.to(torch.float32), exluded_links=[])
 
     hand_pcd = o3d.geometry.PointCloud()
+    contact_pcd = o3d.geometry.PointCloud()
 
     hand_pcd.points = o3d.utility.Vector3dVector(hand_points.detach().cpu().numpy().squeeze())
+    contact_pcd.points = o3d.utility.Vector3dVector(contact_points.detach().cpu().numpy().squeeze())
 
-    o3d.visualization.draw_geometries([hand_pcd, mesh])
+    # contact_pcd.translate(np.array([0.2, 0 ,0]))
+
+    o3d.visualization.draw_geometries([mesh, hand_pcd])
 
     print(f'Item {item_name}')
     print(f'Item translate {pcd_position[0]}')
@@ -284,7 +292,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--item",
-        default="cylinder",
+        default="",
     )
 
     args = parser.parse_args()

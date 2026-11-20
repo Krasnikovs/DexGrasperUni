@@ -36,8 +36,6 @@ class DDPM(nn.Module):
         self.ddpm_schedule = params['schedule_cfg']
         self.rand_t_type = params['rand_t_type']
         
-        
-
         self.has_observation = has_obser # used in some task giving observation
 
         for k, v in make_schedule_ddpm(self.timesteps, **self.ddpm_schedule).items():
@@ -166,18 +164,23 @@ class DDPM(nn.Module):
         obj_pcd = data['pos'].to(self.device)
         hand_model.update_kinematics(q = pred_x0)
         hand_pcd = hand_model.get_surface_points(q= pred_x0).to(dtype=torch.float32)
+        
         if not data['normal'].is_cuda:
             normal = torch.tensor(data['normal']).to(self.device)
         else:
             normal = data['normal']
+
         obj_pcd = torch.func.rearrange(obj_pcd, '(b n) c -> b n c', b=B, n=normal.shape[1])
         obj_pcd_nor = torch.cat((obj_pcd, normal), dim=-1).to(dtype=torch.float32)
+        
         ERF_loss_value = ERF_loss(obj_pcd_nor, hand_pcd)
         dis_keypoint = hand_model.get_dis_keypoints(q= pred_x0)
         SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd)
         hand_keypoint = hand_model.get_keypoints(q= pred_x0)
         SRF_loss_value = SRF_loss(hand_keypoint)
         loss_dfm =self.criterion(output, noise)
+        
+        # loss = loss_dfm  + SPF_loss_value + ERF_loss_value
         loss = loss_dfm  + SRF_loss_value + SPF_loss_value + ERF_loss_value
         return {'loss': loss}
     

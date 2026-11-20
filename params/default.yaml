@@ -54,7 +54,7 @@ DDPM:
   rand_t_type: 'half' # 'half' or 'all'
   loss_type: 'l1' # 'l1' or 'l2'
 
-  urdf_assets_file: "assets/urdf/urdf_assets_meta.json"
+  urdf_assets_file: "assets/sr_description/urdf_assets_meta.json" # "assets/urdf/urdf_assets_meta.json"
 
   sample:
     use_dpmsolver: false # Whether to use dpmsolver++ for sampling
@@ -118,9 +118,9 @@ grasp_with_object:
     min: -0.1
     max: 0.1
   loss_weights:
-    SRF_loss: 2.0
-    SPF_loss: 2.0
-    ERF_loss: 0.3
+    SRF_loss: 1.5
+    SPF_loss: 1.4
+    ERF_loss: 0.4
   asset_dir: ${task.dataset.asset_dir}
   asset_dir_slurm: ${task.dataset.asset_dir_slurm}
 
@@ -130,7 +130,7 @@ grasp_with_object:
   normalize_x: true
   normalize_x_trans: true
   
-  urdf_assets_file: "assets/urdf/urdf_assets_meta.json"
+  urdf_assets_file: "assets/sr_description/urdf_assets_meta.json" # "assets/urdf/urdf_assets_meta.json"
 
 # hydra:
 #   run:

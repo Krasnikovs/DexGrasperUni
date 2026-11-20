@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import pickle
 import torch.functional as F
-from utils.handmodel import get_handmodel, ERF_loss, SPF_loss, SRF_loss, ERF_loss_
+from utils.handmodel import get_handmodel, ERF_loss, SPF_loss, SRF_loss
 from utils.utils import HandParams
 
 class Optimizer():
@@ -16,8 +16,6 @@ class Optimizer():
         pass
 
 class GraspWithObject(Optimizer):
-
-    _N_OBJ = 4096
 
     # _global_trans_lower = torch.tensor([-0.13128923, -0.10665303, -0.45753425], device='cuda')
     # _global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427], device='cuda')
@@ -67,11 +65,12 @@ class GraspWithObject(Optimizer):
         obj_pcd = torch.func.rearrange(obj_pcd, '(b n) c -> b n c', b=self._BATCH_SIZE, n=normal.shape[1])
 
         obj_pcd_nor = torch.cat((obj_pcd, normal), dim=-1).to(dtype=torch.float32)
-        ERF_loss_value = ERF_loss_(obj_pcd_nor, hand_pcd)
+        ERF_loss_value = ERF_loss(obj_pcd_nor, hand_pcd)
         dis_keypoint = self.hand_model.get_dis_keypoints(q= x)
         SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd_nor)
         hand_keypoint = self.hand_model.get_keypoints(q= x)
         SRF_loss_value = SRF_loss(hand_keypoint)
+        # return  self.weight_SPF_loss * SPF_loss_value + self.weight_ERF_loss * ERF_loss_value
         return  self.weight_SRF_loss * SRF_loss_value  + self.weight_SPF_loss * SPF_loss_value + self.weight_ERF_loss * ERF_loss_value
     
     def gradient(self, x: torch.Tensor = None, x_0: torch.Tensor= None, data: Dict= None, x_mean: torch.Tensor= None, x_sample: torch.Tensor= None, std = None) -> torch.Tensor:

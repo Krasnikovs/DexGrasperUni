@@ -3,6 +3,7 @@ import os
 import open3d as o3d
 import numpy as np
 from scipy.spatial.transform import Rotation
+from scipy.spatial import Delaunay
 
 import torch.nn
 
@@ -110,6 +111,7 @@ class HandModel:
             raise NotImplementedError
 
         o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
+        self.collision_points = {}
 
         for i_link, link in enumerate(visual.links): # could replase these with shadow robot mujoco models collisions
                                                     # should try and find model for gazebo
@@ -120,12 +122,14 @@ class HandModel:
             if type(link.visuals[0].geometry) == Mesh:
                 # print(link.visuals[0])
                 if robot_name == 'shadowhand' or robot_name == 'allegro' or robot_name == 'barrett':
-                    filename = link.visuals[0].geometry.filename.split('/')[-1]
+                    # filename = link.visuals[0].geometry.filename.split('/')[-1]
+                    filename = link.visuals[0].geometry.filename.replace('package://', 'assets/')
                 elif robot_name == 'allegro':
                     filename = f"{link.visuals[0].geometry.filename.split('/')[-2]}/{link.visuals[0].geometry.filename.split('/')[-1]}"
                 else:
                     filename = link.visuals[0].geometry.filename
-                mesh = o3d.io.read_triangle_mesh(os.path.join(mesh_path, filename))
+                mesh = o3d.io.read_triangle_mesh(filename)
+                # mesh = o3d.io.read_triangle_mesh(os.path.join(mesh_path, filename))
             elif type(link.visuals[0].geometry) == Cylinder:
                 r = link.visuals[0].geometry.radius
                 h = link.visuals[0].geometry.length
@@ -139,56 +143,35 @@ class HandModel:
             else:
                 print(type(link.visuals[0].geometry))
                 raise NotImplementedError
+
             try:
                 scale = np.array(
                     link.visuals[0].geometry.scale).reshape([1, 3])
             except:
                 scale = np.array([[1, 1, 1]])
+
             try:
                 rotation = Rotation.from_euler('xyz', link.visuals[0].origin.rpy).as_matrix()
                 translation = np.reshape(link.visuals[0].origin.xyz, [1, 3])
-                # print('---')
-                # print(link.visuals[0].origin.rpy, rotation)
-                # print('---')
             except AttributeError:
                 rotation = np.identity(3)
                 translation = np.array([[0, 0, 0]])
 
-            # Surface point
-            # mesh.sample(int(mesh.area * 100000)) * scale
+            if type(link.visuals[0].geometry) == Mesh:
+                hand_pcd = mesh.sample_points_uniformly(number_of_points=int(len(mesh.vertices)*0.25), use_triangle_normal=True)
+            else:
+                hand_pcd = mesh.sample_points_uniformly(number_of_points=300, use_triangle_normal=True)
 
-            hand_pcd = mesh.sample_points_uniformly(number_of_points=256, use_triangle_normal=True)
             pts = np.asarray(hand_pcd.points)
             pts_normal = np.asarray(hand_pcd.normals)
 
-
-            # if self.robot_name == 'shadowhand':
-            #     pts, pts_face_index = trimesh.sample.sample_surface(mesh=mesh, count=64) # collage.Collage.geometries[0].collada.geometries[0].primitives[0].vertex
-            #     pts_normal = np.array([mesh.face_normals[x] for x in pts_face_index], dtype=float)
-            # else:
-            #     pts, pts_face_index = trimesh.sample.sample_surface(mesh=mesh, count=128)
-            #     pts_normal = np.array([mesh.face_normals[x] for x in pts_face_index], dtype=float)
-
-            # if self.robot_name == 'barrett':
-            #     if link.name in ['bh_base_link']:
-            #         pts = trimesh.sample.volume_mesh(mesh=mesh, count=1024)
-            #         pts_normal = np.array([[0., 0., 1.] for x in range(pts.shape[0])], dtype=float)
-            # if self.robot_name == 'ezgripper':
-            #     if link.name in ['left_ezgripper_palm_link']:
-            #         pts = trimesh.sample.volume_mesh(mesh=mesh, count=1024)
-            #         pts_normal = np.array([[1., 0., 0.] for x in range(pts.shape[0])], dtype=float)
-            # if self.robot_name == 'robotiq_3finger':
-            #     if link.name in ['gripper_palm']:
-            #         pts = trimesh.sample.volume_mesh(mesh=mesh, count=1024)
-            #         pts_normal = np.array([[0., 0., 1.] for x in range(pts.shape[0])], dtype=float)
-
             pts *= scale
             
-            if robot_name == 'shadowhand':
-                pts = pts[:, [0, 2, 1]]
-                pts_normal = pts_normal[:, [0, 2, 1]]
-                pts[:, 1] *= -1
-                pts_normal[:, 1] *= -1
+            # if robot_name == 'shadowhand': # this just rotates the meshes
+            #     pts = pts[:, [0, 2, 1]]
+            #     pts_normal = pts_normal[:, [0, 2, 1]]
+            #     pts[:, 1] *= -1
+            #     pts_normal[:, 1] *= -1
 
             pts = np.matmul(rotation, pts.T).T + translation
             # pts_normal = np.matmul(rotation, pts_normal.T).T
@@ -198,6 +181,85 @@ class HandModel:
                 device).float().unsqueeze(0).repeat(batch_size, 1, 1)
             self.surface_points_normal[link.name] = torch.from_numpy(pts_normal).to(
                 device).float().unsqueeze(0).repeat(batch_size, 1, 1)
+
+            collision_mesh = o3d.geometry.TriangleMesh()
+
+            for col in link.collisions:
+                try:
+                    rotation = Rotation.from_euler('xyz', col.origin.rpy).as_matrix()
+                    translation = np.array(col.origin.xyz)
+                except AttributeError:
+                    rotation = np.identity(3)
+                    translation = np.array([0, 0, 0])
+
+                try:
+                    scale = np.array(
+                        col.geometry.scale).reshape([1, 3])
+                except:
+                    scale = np.array([[1, 1, 1]])
+
+                if type(col.geometry) == Mesh:
+                    # print(link.visuals[0])
+                    if robot_name == 'shadowhand' or robot_name == 'allegro' or robot_name == 'barrett':
+                        # filename = col.geometry.filename.split('/')[-1]
+                        filename = col.geometry.filename.replace('package://', 'assets/')
+                    else:
+                        filename = col.geometry.filename
+                    # col_mesh = o3d.io.read_triangle_mesh(os.path.join(mesh_path, filename))
+                    col_mesh = o3d.io.read_triangle_mesh(filename)
+                    col_mesh.scale(scale[0,0], center=np.zeros(3))
+                    # col_mesh.translate(col_mesh.get_center() * -1)
+                elif type(col.geometry) == Cylinder:
+                    r = col.geometry.radius
+                    h = col.geometry.length
+                    col_mesh = o3d.geometry.TriangleMesh.create_cylinder(r, h)
+                elif type(col.geometry) == Box:
+                    w, h, d = col.geometry.size
+                    col_mesh = o3d.geometry.TriangleMesh.create_box(w, h, d)
+                elif type(col.geometry) == Sphere:
+                    r = col.geometry.radius
+                    col_mesh = o3d.geometry.TriangleMesh.create_sphere(r)
+                else:
+                    print(type(col.geometry))
+                    raise NotImplementedError
+
+                col_mesh.compute_triangle_normals()
+
+                if type(col.geometry) == Mesh:
+                    col_mesh.translate(translation, relative=True)
+                else:
+                    col_mesh.translate(translation, relative=False)
+                    
+                col_mesh.rotate(rotation)
+                # col_mesh.scale(scale[0,0], center=np.zeros(3))
+                # col_mesh.scale(scale[0,0], center=col_mesh.get_center())
+
+
+                collision_mesh += col_mesh
+
+            if type(link.visuals[0].geometry) == Mesh:
+                pts_count = int(len(collision_mesh.vertices)*0.5)
+            else:
+                pts_count = int(128)
+
+            col_pcd = collision_mesh.sample_points_uniformly(number_of_points=pts_count, use_triangle_normal=True)
+
+            collision_pts = np.asarray(col_pcd.points)
+
+            # if robot_name == 'shadowhand' and type(col.geometry) == Mesh:
+            #     collision_pts = collision_pts[:, [0, 2, 1]]
+            #     collision_pts[:, 1] *= -1
+
+            # if type(col.geometry) == Mesh:
+            #     collision_pts = collision_pts * scale
+            #     collision_pts = collision_mesh.sample_points_uniformly(number_of_points=int(len(collision_mesh.vertices)*0.05), use_triangle_normal=True)
+            # else:
+            #     collision_pts = collision_mesh.sample_points_uniformly(number_of_points=300, use_triangle_normal=True)
+
+            # pts = np.asarray(collision_pts.points)
+
+            self.collision_points[link.name] = torch.from_numpy(collision_pts).to(
+                device, dtype=torch.float32).unsqueeze(0).repeat(batch_size, 1, 1)
 
         self.current_status = None
 
@@ -232,29 +294,31 @@ class HandModel:
     def get_keypoints(self, q=None, downsample=True):
         if q is not None:
             self.update_kinematics(q)
-        keypoints = [ # look at this, this may could have been just matrix * matrix
-            self.current_status[link_name].transform_points(torch.tensor(self.keypoints[link_name], device=self.device, dtype=torch.float32)).expand(self.batch_size, -1, -1)
-            for link_name in self.keypoints if len(self.keypoints[link_name]) > 0]
-        keypoints = torch.cat(keypoints, dim=1)
-        keypoints = torch.bmm(keypoints, self.global_rotation.transpose(1, 2)) + self.global_translation.unsqueeze(1)
+        # keypoints = [ # look at this, this may could have been just matrix * matrix
+        #     # (self.current_status['ffproximal'].get_matrix() @ torch.tensor(a, device=self.device, dtype=torch.float32))
+        #     self.current_status[f'rh_{link_name}'].transform_points(torch.tensor(self.keypoints[link_name], device=self.device, dtype=torch.float32)).expand(self.batch_size, -1, -1)
+        #     for link_name in self.keypoints if len(self.keypoints[link_name]) > 0]
+        
+        keypoints = [self.current_status[link_name].get_matrix()[0,:3,3:].T for link_name in self.current_status]
+        keypoints = torch.cat(keypoints, dim=0)
+        keypoints = torch.bmm(keypoints.unsqueeze(0), self.global_rotation.transpose(1, 2)) + self.global_translation
         return keypoints* self.scale
     
-    def get_dis_keypoints(self, q=None, downsample=True):
+    def get_dis_keypoints(self, q=None, exluded_links = ['rh_forearm', 'rh_wrist', 'rh_palm']):
         if q is not None:
             self.update_kinematics(q)
         dis_points = [ # look at this, this may could have been just matrix * matrix
-            self.current_status[link_name].transform_points(torch.tensor(self.dis_key_point[link_name], device=self.device, dtype=torch.float32)).expand(self.batch_size, -1, -1)
-            for link_name in self.dis_key_point if len(self.dis_key_point[link_name]) > 0]
+            self.current_status[link_name].transform_points(self.collision_points[link_name]).expand(self.batch_size, -1, -1)
+            for link_name in self.collision_points if len(self.collision_points[link_name]) > 0 or not link_name in exluded_links]
         dis_points = torch.cat(dis_points, dim=1)
         dis_points = torch.bmm(dis_points, self.global_rotation.transpose(1, 2)) + self.global_translation.unsqueeze(1)
         return dis_points* self.scale
     
-
-    def get_surface_points(self, q=None, downsample=True):
+    def get_surface_points(self, q=None, downsample=True, exluded_links = ['rh_forearm', 'rh_wrist']):
         if q is not None:
             self.update_kinematics(q)
         surface_points = []
-        exluded_links = ['forearm', 'wrist']
+        # exluded_links = ['forearm', 'wrist']
 
         for link_name in self.surface_points:
             # for link_name in parts:
@@ -287,64 +351,7 @@ def ERF_loss(obj_pcd_nor: torch.Tensor, hand_pcd: torch.Tensor):
     :param hand_pcd: B x N_hand x 3 (hand point cloud)
     :return: ERF_loss (scalar)
     """
-    # b = hand_pcd.shape[0]
-    # n_obj = obj_pcd_nor.shape[1]
-    # n_hand = hand_pcd.shape[1]
 
-    # Separate object point cloud and normals
-    obj_pcd = obj_pcd_nor[:, :, :3]
-    obj_nor = obj_pcd_nor[:, :, 3:6]
-
-    # Compute K-nearest neighbors
-    knn_result = knn_points(hand_pcd, obj_pcd, K=1, return_nn=True)
-    distances = knn_result.dists
-    indices = knn_result.idx
-
-    # h = torch.zeros((hand_pcd.shape[1], 3)).to(device=hand_pcd.device)
-    # o = torch.zeros((obj_pcd.shape[1], 3)).to(device=hand_pcd.device)
-    # h[:] = hand_pcd[0]
-    # o[:] = obj_pcd[0]
-
-    # knn_result = pointops.knn_query(nsample=1, new_xyz=hand_pcd[0].contiguous(), xyz=obj_pcd[0].contiguous(), new_offset=torch.tensor(hand_pcd.shape[1], device=hand_pcd.device), offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device))
-    # distances = knn_result[1].unsqueeze(0)
-    # indices = knn_result[0].unsqueeze(0)
-
-    # obj_pcd_grouping = pointops.grouping2(obj_pcd[0].contiguous(), indices.int())
-    # obj_nor_grouping = pointops.grouping2(obj_nor[0].contiguous(), indices.int())
-
-    # hand_obj_signs = ((obj_pcd_grouping - hand_pcd) * obj_nor_grouping).sum(dim=2)
-    # knn = knn_result.knn
-    distances = distances.sqrt()
-    # # Extract the closest object points and normals
-    hand_obj_points = torch.gather(obj_pcd, 1, indices.expand(-1, -1, 3))
-    hand_obj_normals = torch.gather(obj_nor, 1, indices.expand(-1, -1, 3))
-    # Compute the signs
-    hand_obj_signs = ((hand_obj_points - hand_pcd) * hand_obj_normals).sum(dim=2)
-    
-    hand_obj_signs = (hand_obj_signs > 0.)
-    collision_value = distances.squeeze(2)[hand_obj_signs]
-
-    # hand_obj_signs = (hand_obj_signs > 0.).float()
-    # Compute collision value
-    # collision_value = (hand_obj_signs * hand_obj_dist).mean(dim=1)
-    # collision_value = (hand_obj_signs * distances.squeeze(2)).max(dim=1).values
-    ERF_loss = collision_value.mean()
-    # ERF_loss = torch.abs(hand_obj_signs).mean()
-    return ERF_loss
-
-def ERF_loss_(obj_pcd_nor: torch.Tensor, hand_pcd: torch.Tensor):
-    """
-    Calculate the penalty loss based on point cloud and normal.
-
-    :param obj_pcd_nor: B x N_obj x 6 (object point cloud with normals)
-    :param hand_pcd: B x N_hand x 3 (hand point cloud)
-    :return: ERF_loss (scalar)
-    """
-    # b = hand_pcd.shape[0]
-    # n_obj = obj_pcd_nor.shape[1]
-    # n_hand = hand_pcd.shape[1]
-
-    # Separate object point cloud and normals
     obj_pcd = obj_pcd_nor[:, :, :3]
     obj_nor = obj_pcd_nor[:, :, 3:6]
 
@@ -356,24 +363,13 @@ def ERF_loss_(obj_pcd_nor: torch.Tensor, hand_pcd: torch.Tensor):
     obj_nor_grouping = pointops.grouping2(obj_nor[0].contiguous(), indices.int())
 
     hand_obj_signs = ((obj_pcd_grouping - hand_pcd) * obj_nor_grouping).sum(dim=2)
-    # hand_obj_signs = (hand_obj_signs > 0.).float()
-    # collision_value = (hand_obj_signs * distances.squeeze(2)).max(dim=1).values
-    ERF_loss = torch.abs(hand_obj_signs).mean() # what did this do? 
+    ERF_loss = torch.abs(hand_obj_signs).mean()
     return ERF_loss
 
-def SPF_loss(dis_points, obj_pcd: torch.Tensor, thres_dis = 0.02 ):
+def SPF_loss(dis_points, obj_pcd: torch.Tensor, thres_dis = 0.04 ):
     dis_points = dis_points.to(dtype=torch.float32)
-    # obj_nor = obj_pcd[:, :, 3:].to(dtype=torch.float32)
+    obj_nor = obj_pcd[:, :, 3:].to(dtype=torch.float32)
     obj_pcd = obj_pcd[:, :, :3].to(dtype=torch.float32)
-    # dis_pred = knn_points(dis_points, obj_pcd).dists[:, :, 0] # 64*140  # squared chamfer distance from object_pc to contact_candidates_pred
-    
-    # dis_pred = pointops.knn_query(
-    #     nsample=1, 
-    #     new_xyz=dis_points[0], 
-    #     xyz=obj_pcd[0], 
-    #     new_offset=torch.tensor(dis_points.shape[1], device=dis_points.device), 
-    #     offset=torch.tensor(obj_pcd.shape[1], device=obj_pcd.device)
-    # )[1].reshape(1,140)
     knn_result = pointops.knn_query(
         nsample=1, 
         new_xyz=dis_points[0].contiguous(), 
@@ -385,16 +381,19 @@ def SPF_loss(dis_points, obj_pcd: torch.Tensor, thres_dis = 0.02 ):
     indices = knn_result[0].unsqueeze(0)
     
     obj_pcd_grouping = pointops.grouping2(obj_pcd[0].contiguous(), indices.int())
+    obj_nor_grouping = pointops.grouping2(obj_nor[0].contiguous(), indices.int())
     # obj_con_point_dist = (obj_pcd_grouping - dis_points).sum(dim=2).abs()
-    obj_con_point_dist = torch.linalg.norm(obj_pcd_grouping - dis_points, dim=2)
-    mask = obj_con_point_dist < thres_dis
-    # maybe look if these are negative
+    obj_con_point_dist = ((obj_pcd_grouping - dis_points) * obj_nor_grouping).sum(dim=2).abs()
+    # obj_con_point_dist = torch.linalg.norm(obj_pcd_grouping - dis_points, dim=2)
+    thres_mask = obj_con_point_dist > thres_dis
+    # maybe look if these are inside of object
+
+    # t = Delaunay(obj_pcd.cpu().detach().numpy()[0])
+    # hull_mask = torch.from_numpy(t.find_simplex(dis_points.cpu().detach().numpy()[0])>=0).to(device='cuda').unsqueeze(dim=0)
+
+    mask = thres_mask
 
     SPF_loss = obj_con_point_dist[mask].mean()
-
-    # small_dis_pred = dis_pred < thres_dis ** 2# 64*140
-    # SPF_loss = dis_pred[small_dis_pred].sqrt().sum() / (small_dis_pred.sum().item() + 1e-5)#1
-    # SPF_loss = dis_pred[small_dis_pred].sum() / (small_dis_pred.sum().item() + 1e-5)
     return SPF_loss
 
 def SRF_loss(points):
@@ -404,4 +403,5 @@ def SRF_loss(points):
     dis_spen = 0.02 - dis_spen
     dis_spen[dis_spen < 0] = 0
     SPF_loss = dis_spen.sum() / B
+    # SPF_loss = dis_spen.mean()
     return SPF_loss

@@ -10,3 +10,4 @@ params/*
 !params/default.yaml
 !params/sr_dex_hand_limits.yaml
 datasets/*
+assets/urdf

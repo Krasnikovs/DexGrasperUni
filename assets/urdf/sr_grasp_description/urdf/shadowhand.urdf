@@ -166,7 +166,7 @@
       <material name="Grey" />
     </visual>
     <collision>
-      <origin rpy="0 0 0" xyz="0 0 0.0125" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry name="middle_collision_geom">
         <box size="0.008 0.008 0.015" />
       </geometry>
@@ -189,7 +189,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry name="distal_visual">
-        <mesh filename="package://sr_grasp_description/meshes/distal_ellipsoid.obj" scale="0.1 0.1 0.1" />
+        <mesh filename="package://sr_grasp_description/meshes/F1.obj" scale="0.1 0.1 0.1" />
       </geometry>
       <material name="Grey" />
     </visual>
@@ -323,7 +323,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry name="distal_collision_geom">
-        <mesh filename="package://sr_grasp_description/meshes/F1.obj" scale="0.1 0.1 0.1" />
+        <mesh filename="package://sr_grasp_description/meshes/distal_ellipsoid.obj" scale="0.1 0.1 0.1" />
       </geometry>
     </collision>
   </link>
@@ -441,7 +441,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry name="distal_visual">
-        <mesh filename="package://sr_grasp_description/meshes/distal_ellipsoid.obj" scale="0.1 0.1 0.1" />
+        <mesh filename="package://sr_grasp_description/meshes/F1.obj" scale="0.1 0.1 0.1" />
       </geometry>
       <material name="Grey" />
     </visual>
@@ -601,7 +601,7 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0" />
       <geometry name="distal_collision_geom">
-        <mesh filename="package://sr_grasp_description/meshes/F1.obj" scale="0.1 0.1 0.1" />
+        <mesh filename="package://sr_grasp_description/meshes/distal_ellipsoid.obj" scale="0.1 0.1 0.1" />
       </geometry>
     </collision>
   </link>
@@ -753,7 +753,7 @@
     <visual>
       <origin rpy="0 0 0" xyz="0 0.002 0.0025" />
       <geometry name="thdistal_visual">
-        <mesh filename="package://sr_grasp_description/meshes/distal_ellipsoid.obj" scale="0.1 0.1 0.1" />
+        <mesh filename="package://sr_grasp_description/meshes/TH1_z.obj" scale="0.1 0.1 0.1" />
       </geometry>
       <material name="shadow_thmiddle_material">
         <color rgba="0.2 0.2 0.2 1.0" />
