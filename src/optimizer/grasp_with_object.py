@@ -16,10 +16,6 @@ class Optimizer():
         pass
 
 class GraspWithObject(Optimizer):
-
-    # _global_trans_lower = torch.tensor([-0.13128923, -0.10665303, -0.45753425], device='cuda')
-    # _global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427], device='cuda')
-
     _NORMALIZE_LOWER = -1.
     _NORMALIZE_UPPER = 1.
     def __init__(self, params, device, slurm: bool = False, *args, **kwargs) -> None:
@@ -148,23 +144,3 @@ class GraspWithObject(Optimizer):
             else:
                 x_t =  x_sample + mix_step
             return x_t
-
-    # def angle_denormalize(self, joint_angle: torch.Tensor):
-    #     joint_angle_denorm = joint_angle + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-    #     joint_angle_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-    #     joint_angle_denorm = joint_angle_denorm * (self._joint_angle_upper - self._joint_angle_lower) + self._joint_angle_lower
-    #     return joint_angle_denorm
-
-    # def trans_denormalize(self, global_trans: torch.Tensor):
-    #     global_trans_denorm = global_trans + (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER) / 2
-    #     global_trans_denorm /= (self._NORMALIZE_UPPER - self._NORMALIZE_LOWER)
-    #     global_trans_denorm = global_trans_denorm * (self._global_trans_upper - self._global_trans_lower) + self._global_trans_lower
-    #     return global_trans_denorm
-
-    # def set_joint_limits(self, lower_limit, upper_limit):
-    #     self._joint_angle_lower = lower_limit.to(self.device)
-    #     self._joint_angle_upper = upper_limit.to(self.device)
-
-    # def set_global_limits(self, lower_limit, upper_limit):
-    #     self._global_trans_lower = lower_limit.to(self.device)
-    #     self._global_trans_upper = upper_limit.to(self.device)

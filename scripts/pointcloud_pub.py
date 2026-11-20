@@ -2,6 +2,7 @@ import numpy as np
 import cv2 as cv
 import open3d as o3d
 from scipy.spatial.transform import Rotation
+import yaml
 
 from ros2_subscribers import *
 from ros2_publishers import *
@@ -9,6 +10,116 @@ from ros2_publishers import *
 import rclpy
 import threading
 import argparse
+from os.path import join
+from dataclasses import dataclass
+
+@dataclass
+class Intrinsics:
+
+    K: np.ndarray = np.identity(3)
+    D: np.ndarray = np.zeros(5)
+    alpha: int = 0
+    xi: int = 0
+    w: int = -1
+    h: int = -1
+
+    @classmethod
+    def load_file(cls, path: str, w: int = 640, h: int = 480):
+
+        path = join(path, "cal_data.yaml")
+
+        with open(path, "r") as f:
+            calib = yaml.safe_load(f)
+
+        camera_model = 'pinhole'
+        if 'camera_model' in calib:
+            camera_model = calib['camera_model']
+
+        K = np.identity(3)
+        if isinstance(calib["intrinsics"], list):
+            K[0,0] = calib["intrinsics"][0]
+            K[1,1] = calib["intrinsics"][1]
+            K[0,2] = calib["intrinsics"][2]
+            K[1,2] = calib["intrinsics"][3]
+        elif isinstance(calib["intrinsics"], dict):
+            K[0,0] = calib["intrinsics"]["fx"]
+            K[1,1] = calib["intrinsics"]["fy"]
+            K[0,2] = calib["intrinsics"]["cx"]
+            K[1,2] = calib["intrinsics"]["cy"]
+        D = np.zeros(5)
+
+        if camera_model == 'pinhole' and 'distortion' in calib:
+            if isinstance(calib["distortion"], list):
+                D = np.array(calib["distortion"])
+            elif isinstance(calib["distortion"], dict):
+                D[0] = calib["distortion"]["k1"]
+                D[1] = calib["distortion"]["k2"]
+                D[2] = calib["distortion"]["t1"]
+                D[3] = calib["distortion"]["t2"]
+                D[4] = calib["distortion"]["k3"]
+
+        alpha = 0
+        xi = 0
+        if camera_model == 'ds' and 'distortion' in calib:
+            alpha = calib['distortion']['alpha']
+            xi = calib['distortion']['xi']
+
+        return cls(K=K,D=D,alpha=alpha,xi=xi,w=w,h=h)
+
+class CameraParams:
+
+    def __init__(self, T_w_cam: np.ndarray, intr: Intrinsics):
+        self.T_os_cam = T_w_cam
+        self.K = intr.K
+        self.D = intr.D
+        self.w, self.h = intr.w, intr.h
+        self.alpha, self.xi = intr.alpha, intr.xi
+
+class UserNode(Node):
+    def __init__():
+        pass
+
+    def img_to_pcd(self):
+        pass
+
+    def read_pcd_file(self):
+        pass
+
+    def get_cam_params(self):
+        intrinsics = Intrinsics.load_file()
+        self.cam_params = CameraParams(np.identity(4), intrinsics)
+
+    def get_calib(self):
+        with open(join(path, 'apriltag_calib.yaml'), 'r') as f:
+            calib = yaml.safe_load(f)
+
+        self.T_b_w = np.identity(4)
+        T_b_w_quat = np.array([
+            calib["T_b_w"]["qw"],
+            calib["T_b_w"]["qx"],
+            calib["T_b_w"]["qy"],
+            calib["T_b_w"]["qz"]
+        ])
+        self.T_b_w[:3,:3] = Rotation.from_quat(T_b_w_quat, scalar_first=True).as_matrix()
+        self.T_b_w[:3,3:] = np.array([
+            calib["T_b_w"]["x"],
+            calib["T_b_w"]["y"],
+            calib["T_b_w"]["z"]
+        ]).reshape(3,1)
+
+        self.T_g_c = np.identity(4)
+        T_g_c_quat = np.array([
+            calib["T_g_c"]["qw"],
+            calib["T_g_c"]["qx"],
+            calib["T_g_c"]["qy"],
+            calib["T_g_c"]["qz"]
+        ])
+        self.T_g_c[:3,:3] = Rotation.from_quat(T_g_c_quat, scalar_first=True).as_matrix()
+        self.T_g_c[:3,3:] = np.array([
+            calib["T_g_c"]["x"],
+            calib["T_g_c"]["y"],
+            calib["T_g_c"]["z"]
+        ]).reshape(3,1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -74,12 +185,6 @@ if __name__ == '__main__':
     
     img = np.zeros((10,10,3))
 
-    
-
-    
-    # q_c_o = Rotation.random().as_matrix()
-    # q_c_o = Rotation.from_matrix(q_c_o).as_quat()
-    
     pcd_model_path = 'data/Realdex/Realdex/meshdata/duck_toy.obj'
     mesh = o3d.io.read_triangle_mesh(pcd_model_path)
     mesh.compute_triangle_normals()
@@ -90,11 +195,6 @@ if __name__ == '__main__':
     object_points = np.asarray(object_pcd.points)
     object_normals = np.asarray(object_pcd.normals)
     object_points = np.concat((object_points,object_normals),axis=1)
-    # object_points = mesh.sample_points_uniformly(number_of_points=len(mesh.vertices), use_triangle_normal=True)
-    # object_points = np.asarray(object_points.points)
-    # object_points = np.loadtxt('/home/gustavskrasnikovs/repos/off_shute/data/monster_0_points.csv', delimiter=',')
-    # object_points = np.loadtxt('data/cylinder_points.csv', delimiter=',')
-
 
     rate = tf_pub_node.create_rate(2)
 

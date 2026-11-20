@@ -5,7 +5,6 @@ from typing import Dict
 from utils.utils import ResBlock, SpatialTransformer
 from utils.utils import timestep_embedding
 from models.pointtransformer import PointTransformerEnc, PointTransformerBlock
-# from einops import rearrange
 
 class UNetModel(nn.Module):
     def __init__(self, params, device) -> None:

@@ -185,8 +185,8 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
     hand_point = torch.tensor(np.zeros(3))
     joint_values = torch.tensor(np.zeros(24))
     
-    normalized_hand_point = hl.trans_denormalize(global_trans=hand_point.cpu()).cuda()
-    normalized_joint_values = hl.angle_denormalize(joint_angle=joint_values.cpu()).cuda()
+    normalized_hand_point = hl.trans_normalize(global_trans=hand_point.cpu()).cuda()
+    normalized_joint_values = hl.angle_normalize(joint_angle=joint_values.cpu()).cuda()
     
     hand_point_joints = torch.cat(
                 [normalized_hand_point, normalized_joint_values], 

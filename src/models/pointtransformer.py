@@ -22,10 +22,8 @@ class PointTransformerLayer(nn.Module):
         self.softmax = nn.Softmax(dim=1)
         
     def forward(self, pxo) -> torch.Tensor:
-        p, x, o = pxo  # (n, 3), (n, c), (b)
-        x_q, x_k, x_v = self.linear_q(x), self.linear_k(x), self.linear_v(x)  # (n, c)
-        # x_k = pointops.query_and_group(self.nsample, p, p, x_k, None, o, o, with_xyz=True)  # (n, nsample, 3+c)
-        # x_v = pointops.query_and_group(self.nsample, p, p, x_v, None, o, o, use_xyz=False)  # (n, nsample, c)
+        p, x, o = pxo
+        x_q, x_k, x_v = self.linear_q(x), self.linear_k(x), self.linear_v(x) 
         x_k, idx = pointops.knn_query_and_group(
             x_k, p, o, new_xyz=p, new_offset=o, nsample=self.nsample, with_xyz=True
         )
@@ -62,7 +60,7 @@ class TransitionDown(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         
     def forward(self, pxo):
-        p, x, o = pxo  # (n, 3), (n, c), (b)
+        p, x, o = pxo
         p = p.float()
         x = x.float()
         o = o.int()
