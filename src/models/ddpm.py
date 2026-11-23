@@ -162,7 +162,7 @@ class DDPM(nn.Module):
         
         ERF_loss_value = ERF_loss(obj_pcd_nor, hand_pcd)
         dis_keypoint = hand_model.get_dis_keypoints(q= pred_x0)
-        SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd)
+        SPF_loss_value = SPF_loss(dis_keypoint, obj_pcd_nor)
         hand_keypoint = hand_model.get_keypoints(q= pred_x0)
         SRF_loss_value = SRF_loss(hand_keypoint)
         loss_dfm =self.criterion(output, noise)

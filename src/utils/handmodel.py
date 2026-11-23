@@ -299,9 +299,9 @@ class HandModel:
         #     self.current_status[f'rh_{link_name}'].transform_points(torch.tensor(self.keypoints[link_name], device=self.device, dtype=torch.float32)).expand(self.batch_size, -1, -1)
         #     for link_name in self.keypoints if len(self.keypoints[link_name]) > 0]
         
-        keypoints = [self.current_status[link_name].get_matrix()[0,:3,3:].T for link_name in self.current_status]
-        keypoints = torch.cat(keypoints, dim=0)
-        keypoints = torch.bmm(keypoints.unsqueeze(0), self.global_rotation.transpose(1, 2)) + self.global_translation
+        keypoints = [self.current_status[link_name].get_matrix()[0,:3,3:].T.expand(self.batch_size, -1, -1) for link_name in self.current_status]
+        keypoints = torch.cat(keypoints, dim=1)
+        keypoints = torch.bmm(keypoints, self.global_rotation.transpose(1, 2)) + self.global_translation.unsqueeze(1)
         return keypoints* self.scale
     
     def get_dis_keypoints(self, q=None, exluded_links = ['rh_forearm', 'rh_wrist', 'rh_palm']):

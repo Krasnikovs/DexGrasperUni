@@ -25,8 +25,8 @@ class GraspAnyting(Dataset):
     # _global_trans_upper = torch.tensor([0.12772022, 0.22954416, -0.21764427])
 
 
-    _NORMALIZE_LOWER = -1.
-    _NORMALIZE_UPPER = 1.
+    # _NORMALIZE_LOWER = -1.
+    # _NORMALIZE_UPPER = 1.
 
     def __init__(self, dataset, object_nors) -> None:
         super(GraspAnyting, self).__init__()
@@ -95,7 +95,7 @@ class GraspAnyting(Dataset):
     
     def __getitem__(self, index):
 
-        hand_point = self.hand_poses[index]
+        hand_translate = self.hand_poses[index]
         joint_values = self.joint_values[index]
         hand_rotation = self.hand_rotations[index].T
         
@@ -107,16 +107,16 @@ class GraspAnyting(Dataset):
             joint_values[non_range] = self.hand_params._joint_angle_upper[non_range]
         
 
-        normalized_hand_point = self.hand_params.trans_normalize(hand_point)
+        normalized_hand_translate = self.hand_params.trans_normalize(hand_translate)
         normalized_joint_values = self.hand_params.angle_normalize(joint_values)
-        hand_point_and_joints = torch.cat(
-            [normalized_hand_point, normalized_joint_values], 
+        hand_translate_and_joints = torch.cat(
+            [normalized_hand_translate, normalized_joint_values], 
             dim=0).requires_grad_(True) # why combine both?? figure out if why or can saprate?
 
         item = self.item_names[index]
         geo_v_and_v_norm = torch.tensor(self.object_nors[item])
 
-        rand_rot = Rotation.random().as_matrix()
+        # rand_rot = Rotation.random().as_matrix()
 
         object_points_trans = np.einsum('mn, kn->km', hand_rotation, geo_v_and_v_norm[:,:3])
         vertex_normal = np.einsum('mn, kn->km', hand_rotation, geo_v_and_v_norm[:,3:])
@@ -136,7 +136,7 @@ class GraspAnyting(Dataset):
         # object_points_trans = torch.tensor(object_points_trans, dtype=torch.float64)
 
         data = {
-            'x': hand_point_and_joints, # hand pose and joints
+            'x': hand_translate_and_joints, # hand pose and joints
             'pos': object_points_trans, # objects ?? if nor is object mesh points this could be those points rotated???
             'scene_rot_mat': hand_rotation, # hand rotation
             # 'cam_tran': cam_tran, # camera pose, but empty?

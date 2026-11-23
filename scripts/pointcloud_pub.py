@@ -79,15 +79,60 @@ class UserNode(Node):
     def __init__():
         pass
 
-    def img_to_pcd(self):
-        pass
+    def forward(self, color_frame, depth_frame):
+        if color_frame is None:
+            pcd = self.depth_to_pcd(depth_frame)
+        else:
+            pcd = self.rgbd_to_pcd(color_frame, depth_frame)
+        # could make unprojection with distortion, maybe
+
+        pcd_pub_node.callback(np.asarray(pcd.points)[np.where(np.asarray(mesh.points)[:,2] < 0.75)], 'cam')
+        # or make publishing function
+
+    def static_forward(self):
+        t_w_c = np.array([0.4,-0.5,0.34])
+        # q_w_c = Rotation.from_rotvec(np.array([0,0,0], float) * np.pi/2).as_matrix()
+        q_w_c = Rotation.from_rotvec(np.array([1,0,0], float) * -np.pi/2).as_matrix()
+        # q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,0,1], float) * np.pi/2).as_matrix()
+        q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,-0.5,0], float) * np.pi/2).as_matrix()
+        q_w_c = Rotation.from_matrix(q_w_c).as_quat()
+        cam_tf = ndarray_to_tf2(t_w_c, q_w_c)
+
+        t_c_o = np.array([0, 0, 0.56])
+        q_c_o = Rotation.from_rotvec(np.array([2,0,0], float) * np.pi/2).as_matrix()
+        q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0.,-1.3,0], float) * np.pi/2).as_matrix()
+        q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0,0,1.], float) * np.pi/2).as_matrix()
+        q_c_o = Rotation.from_matrix(q_c_o).as_quat()
+        obj_tf = ndarray_to_tf2(t_c_o, q_c_o)
+        tf_pub_node.write_tf('world', 'cam', cam_tf)
+        tf_pub_node.write_tf('cam', 'obj_pcd', obj_tf)
+        pcd_pub_node.callback(object_points, 'obj_pcd')
+
+    def depth_to_pcd(self, frame):
+        o3d_cam_params = o3d.camera.PinholeCameraIntrinsic(self.cam_params.w, self.cam_params.h, self.cam_params.K)
+        o3d_image = o3d.geometry.Image(frame.astype(np.float32))
+        pcd = pcd.create_from_depth_image(o3d_image, o3d_cam_params)
+
+        return pcd
+
+    def rgbd_to_pcd(self, color_frame, depth_frame):
+        o3d_cam_params = o3d.camera.PinholeCameraIntrinsic(self.cam_params.w, self.cam_params.h, self.cam_params.K)
+        o3d_color_image = o3d.geometry.Image(color_frame.astype(np.float32))
+        o3d_depth_image = o3d.geometry.Image(depth_frame.astype(np.float32))
+        rgbd_image = o3d.geometry.RGBDImage().create_from_color_and_depth(
+            color = o3d_color_image,
+            depth = o3d_depth_image
+        )
+        pcd = pcd.create_from_rgbd_image(rgbd_image, o3d_cam_params)
+
+        return pcd
 
     def read_pcd_file(self):
         pass
 
     def get_cam_params(self):
         intrinsics = Intrinsics.load_file()
-        self.cam_params = CameraParams(np.identity(4), intrinsics)
+        self.cam_params = CameraParams(self.T_b_w, intrinsics)
 
     def get_calib(self):
         with open(join(path, 'apriltag_calib.yaml'), 'r') as f:

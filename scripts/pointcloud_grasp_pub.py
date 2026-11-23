@@ -197,7 +197,8 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)
     mesh = o3d.geometry.PointCloud()
     mesh.points = o3d.utility.Vector3dVector(pcd[:,:3])
-    mesh.normals = o3d.utility.Vector3dVector(pcd[:,3:])
+    # mesh.normals = o3d.utility.Vector3dVector(pcd[:,3:])
+    mesh.estimate_normals(fast_normal_computation = False)
     # mesh = mesh.random_down_sample(0.5)
     T_w_o = np.identity(4)
     T_w_o[:3,3:] = pcd_position[0].reshape(3,1)
@@ -250,7 +251,7 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
 
     # contact_pcd.translate(np.array([0.2, 0 ,0]))
 
-    o3d.visualization.draw_geometries([mesh, hand_pcd])
+    # o3d.visualization.draw_geometries([mesh, hand_pcd])
 
     print(f'Item {item_name}')
     print(f'Item translate {pcd_position[0]}')
@@ -260,7 +261,7 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
     for link, value in predicted_link_tips:
         print(f'{link}: {value.cpu().detach().numpy().flatten()}')
 
-    return item_name, outputs, hl._joint_names, predicted_link_tips
+    return item_name, output, hl._joint_names, predicted_link_tips
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -360,7 +361,8 @@ if __name__ == '__main__':
     object = None
     item = args.item
     source_tf = 'world'
-    target_tf = 'obj_pcd'
+    # target_tf = 'obj_pcd'
+    target_tf = 'cam'
 
     print(f'Subscribing to {args.pcd}')
     print(f'Publishing {args.joint_state}')
