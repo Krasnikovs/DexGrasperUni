@@ -3,6 +3,7 @@ import cv2 as cv
 import open3d as o3d
 from scipy.spatial.transform import Rotation
 import yaml
+from typing import Dict, Callable, List
 
 from ros2_subscribers import *
 from ros2_publishers import *
@@ -75,10 +76,66 @@ class CameraParams:
         self.w, self.h = intr.w, intr.h
         self.alpha, self.xi = intr.alpha, intr.xi
 
-class UserNode(Node):
-    def __init__():
-        pass
+class PCDFilter(Node): # name yet to be decided
+    def __init__(self, args: argparse.Namespace | Dict[str, str | List[str]]): # can test | more
+        super().__init__("pcd_filter_node")
 
+        to_pcd_formats = {
+            "depth": self.depth_to_pcd,
+            "rgbd": self.rgbd_to_pcd,
+            "static": self.mesh_to_pcd
+        }
+
+        chosen_way = ''
+
+        # maybe can make pcd method in a function, that is called here
+        if not args.path_mesh is None:
+            self.get_logger().info(f"Found path for mesh file. Ignoring depth topic")
+            self.to_pcd = to_pcd_formats["static"]
+        elif args.topic_depth is None:
+            self.get_logger().error(f"No value provided for depth topic")
+            return
+        if args.topic_pcd is None:
+            self.get_logger().error(f"No value provided for pcd topic")
+            return
+        if args.path_handeye is None:
+            self.get_logger().error(f"No value provided for handeye calibration result path")
+            return
+
+        if not args.path_depth_info is None:
+            self.get_logger().info(f"Found path for depth image params. Ignoring depth info topic")
+            self.load_cam_params(args.path_depth_info)
+
+        self.depth_node = ImageSubscriberNode(
+            image_topic=args.topic_depth,
+            info_topic=args.topic_depth_info,
+            node_name='img_subscriber'
+        )
+        self.load_calib(args.path_handeye)
+
+        if not args.topic_rgb is None:
+            self.rgb_node = ImageSubscriberNode(
+                image_topic=args.topic_rgb,
+                node_name='rgb_image_subscriber' 
+            )
+            self.to_pcd = to_pcd_formats["rgbd"]
+
+        if chosen_way == "static":
+            o3d.io.read_triangle_mesh(args.path_mesh)
+
+        elif chosen_way == "rgbd":
+            self.rgb_node = ImageSubscriberNode(
+                image_topic=args.topic_rgb,
+                node_name='rgb_image_subscriber' 
+            )
+            self.rgb_node = ImageSubscriberNode(
+                image_topic=args.topic_depth,
+                info_topic=args.topic_depth_info,
+                node_name='rgb_image_subscriber' 
+            )
+
+        self.to_pcd = to_pcd_formats["null"]
+        
     def forward(self, color_frame, depth_frame):
         if color_frame is None:
             pcd = self.depth_to_pcd(depth_frame)
@@ -130,12 +187,12 @@ class UserNode(Node):
     def read_pcd_file(self):
         pass
 
-    def get_cam_params(self):
-        intrinsics = Intrinsics.load_file()
+    def load_cam_params(self, path):
+        intrinsics = Intrinsics.load_file(path)
         self.cam_params = CameraParams(self.T_b_w, intrinsics)
 
-    def get_calib(self):
-        with open(join(path, 'apriltag_calib.yaml'), 'r') as f:
+    def load_calib(self, path):
+        with open(path, 'r') as f:
             calib = yaml.safe_load(f)
 
         self.T_b_w = np.identity(4)
@@ -168,41 +225,61 @@ class UserNode(Node):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        prog="get_data",
-        usage="get_data.py [--source src-frame] [--target target-frame] [--output_path <path to colleted data>] [--cam CAM] [--cam_info CAM_INFO] [--pcd PCD]",
+        # prog="pcd_pub",
+        # usage="pcd_pub.py [--topic_depth DEPTH_TOPIC] [--topic_depth_info DEPTH_INFO_TOPIC] [--topic_rgb RGB_TOPIC] [--topic_pcd PCD_TOPIC] [--path_depth_info DEPTH_INFO_PATH] [--path_handeye HANDEYE_PATH]",
+        # "pcd_pub [--topic_depth DEPTH_TOPIC] [--topic_depth_info DEPTH_INFO_TOPIC] [--topic_rgb RGB_TOPIC] [--topic_pcd PCD_TOPIC] [--path_depth_info DEPTH_INFO_PATH] [--path_handeye HANDEYE_PATH]"
+        # "pcd_pub --topic_depth DEPTH_TOPIC --topic_depth_info DEPTH_INFO_TOPIC --topic_rgb RGB_TOPIC --topic_pcd PCD_TOPIC --path_depth_info DEPTH_INFO_PATH --path_handeye HANDEYE_PATH"
+        description=''
     )
 
     parser.add_argument(
-        "--cam",
+        "--topic_depth", "--topic_img",
         help="cameras topic to aquire images",
-        # default="/basler_dart/camera_0/image_raw",
-        # default="/camera/camera/color/image_raw",
         default="/camera/camera/depth/image_rect_raw",
     )
 
     parser.add_argument(
-        "--pcd",
+        "--topic_pcd", "--pcd",
         help="cameras topic to aquire images",
         default="/points",
-        # default="/camera/camera/color/image_raw",
-        # default="/camera/camera/depth/color/points",
     )
 
     parser.add_argument(
-        "--cam_info",
+        "--topic_depth_info",
         help="cameras topic to aquire camera info",
-        # default="none",
-        # default="/camera/camera/color/camera_info",
         default="/camera/camera/depth/camera_info",
+    )
+
+    parser.add_argument(
+        "--topic_rgb",
+        help="cameras topic to aquire images"
+    )
+
+    parser.add_argument(
+        "--path_depth_info",
+        help="cameras topic to aquire images"
+    )
+
+    parser.add_argument(
+        "--path_handeye",
+        help="cameras topic to aquire images",
+        default="params/apriltag_calib.yaml"
+    )
+
+    parser.add_argument(
+        "--path_mesh",
+        help="cameras topic to aquire images",
+        default="datasets/Realdex/Realdex/meshdata/box.obj"
     )
 
     args = parser.parse_args()
     rclpy.init()
+    pf = UserNode(args)
     mesh = o3d.geometry.PointCloud()
 
-    img_node = ImageSubscriberNode(
-        image_topic=args.cam,
-        info_topic=args.cam_info,
+    depth_node = ImageSubscriberNode(
+        image_topic=args.topic_depth,
+        info_topic=args.topic_depth_info,
         node_name='img_subscriber'
     )
 
@@ -245,6 +322,10 @@ if __name__ == '__main__':
 
     print(f'Subscribing to {args.cam}')
     print(f'Publishing {args.pcd}')
+    # try:
+    #     while rclpy.ok():
+    #         pass
+    
     try:
         while rclpy.ok():
             t_w_c = np.array([0.4,-0.5,0.34])
