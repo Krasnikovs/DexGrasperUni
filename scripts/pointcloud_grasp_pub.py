@@ -251,7 +251,7 @@ def grasp_pub(model, pcd, pcd_position, device=None, item_name: str = 'cylinder'
 
     # contact_pcd.translate(np.array([0.2, 0 ,0]))
 
-    # o3d.visualization.draw_geometries([mesh, hand_pcd])
+    o3d.visualization.draw_geometries([mesh, hand_pcd])
 
     print(f'Item {item_name}')
     print(f'Item translate {pcd_position[0]}')

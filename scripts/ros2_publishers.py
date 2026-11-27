@@ -2,10 +2,12 @@ import rclpy
 from rclpy.node import Node
 
 import numpy as np
-import yaml
+from scipy.spatial.transform import Rotation
+
+from typing import overload
 
 from tf2_ros import TransformListener, TransformBroadcaster, Buffer
-from geometry_msgs.msg import TransformStamped, Point32
+from geometry_msgs.msg import TransformStamped, Vector3, Quaternion
 from sensor_msgs.msg import PointCloud2, PointField
 
 type_mappings = [(PointField.INT8, np.dtype('int8')), (PointField.UINT8, np.dtype('uint8')), (PointField.INT16, np.dtype('int16')),
@@ -17,7 +19,8 @@ nptype_to_pftype = dict((nptype, pftype) for pftype, nptype in type_mappings)
 def dtype_to_fields(dtype):
     '''Convert a numpy record datatype into a list of PointFields.
     '''
-    datatype=PointField.FLOAT32
+    datatype=nptype_to_pftype[dtype]
+
     fields = [PointField(name='x', offset=0, datatype=datatype, count=1),
           PointField(name='y', offset=4, datatype=datatype, count=1),
           PointField(name='z', offset=8, datatype=datatype, count=1),
@@ -51,27 +54,60 @@ def ndarray_to_pointcloud2(cloud_arr, stamp=None, frame_id=None):
 
     return cloud_msg
 
-def ndarray_to_tf2(pose = np.array([0,0,0]), quat_obj = np.array([0,0,0,1])):
-        t = TransformStamped()
+def ndarray_to_tf2(T: np.ndarray, R: np.ndarray = np.array([0., 0., 0., 1.])) -> TransformStamped:
+        tf = TransformStamped()
 
-        t.header.stamp = rclpy.time.Time().to_msg()
-        # t.header.frame_id = 'tool0'
-        # t.child_frame_id = 'camera_depth_optical_frame'
+        if T.shape == (4,4):
+            translate = T[:3, 3].squeeze()
+            quaternion = Rotation.from_matrix(T[:3,:3]).as_quat()
+        else:
+            translate = T.squeeze()
+            quaternion = R.squeeze()
 
-        t.transform.translation.x = pose[0]
-        t.transform.translation.y = pose[1]
-        t.transform.translation.z = pose[2]
+        tf.header.stamp = rclpy.time.Time().to_msg()
+        tf.transform.translation = Vector3(**dict(zip(['x', 'y', 'z'], translate))) 
+        tf.transform.rotation = Quaternion(**dict(zip(['x', 'y', 'z', 'w'], quaternion)))
+        
+        return tf
 
-        t.transform.rotation.x = quat_obj[0]
-        t.transform.rotation.y = quat_obj[1]
-        t.transform.rotation.z = quat_obj[2]
-        t.transform.rotation.w = quat_obj[3]
+class TFPublisher:
+    def __init__(self, node: Node):
+        
+        self.tf_talker = TransformBroadcaster(node)
 
-        return t
+    def write_tf(self, source_frame, target_frame, tf):
+        
+        if not isinstance(tf, TransformStamped):
+            tf = ndarray_to_tf2(tf)
+
+        tf.header.frame_id = source_frame
+        tf.child_frame_id = target_frame
+        
+        self.tf_talker.sendTransform(
+            tf
+        )
+
+class PCDPublisher:
+    def __init__(self, node: Node, pcd_topic):
+        
+        self.pose_pub = node.create_publisher(
+            PointCloud2,
+            pcd_topic, 
+            10
+        )
+
+    def callback(self, data: np.ndarray | PointCloud2, frame: str = 'world'):
+        if not isinstance(data, PointCloud2):
+            msg = ndarray_to_pointcloud2(data, stamp=rclpy.time.Time().to_msg(), frame_id=frame)
+        else:
+            msg = data
+        self.pose_pub.publish(msg)
 
 class TFPublisherNode(Node):
     def __init__(self, node_name='tf_pub'):
-        super().__init__(node_name)
+        if node is None:
+            super().__init__(node_name)
+            node = self
         self.tf_talker = TransformBroadcaster(self)
 
     def write_tf(self, source_frame, target_frame, t):

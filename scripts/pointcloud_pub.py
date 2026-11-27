@@ -5,14 +5,18 @@ from scipy.spatial.transform import Rotation
 import yaml
 from typing import Dict, Callable, List
 
-from ros2_subscribers import *
-from ros2_publishers import *
-
+from ros2_subscribers import ImageSubscriber
+from ros2_publishers import TFPublisher, PCDPublisher
+from sensor_msgs.msg import CameraInfo
 import rclpy
+from rclpy.node import Node
+
 import threading
 import argparse
 from os.path import join
 from dataclasses import dataclass
+
+# from collections import OrderedDict
 
 @dataclass
 class Intrinsics:
@@ -69,35 +73,26 @@ class Intrinsics:
 
 class CameraParams:
 
-    def __init__(self, T_w_cam: np.ndarray, intr: Intrinsics):
-        self.T_os_cam = T_w_cam
-        self.K = intr.K
-        self.D = intr.D
-        self.w, self.h = intr.w, intr.h
-        self.alpha, self.xi = intr.alpha, intr.xi
+    def __init__(self, intr: Intrinsics | CameraInfo):
+        if isinstance(intr, Intrinsics):
+            self.K = intr.K
+            self.D = intr.D
+            self.width, self.height = intr.w, intr.h
+            self.alpha, self.xi = intr.alpha, intr.xi
+        elif isinstance(intr, CameraInfo):
+            self.K = intr.k.reshape(3,3)
+            self.D = intr.d
+            self.width, self.height = intr.width, intr.height
+            self.alpha, self.xi = None, None
 
 class PCDFilter(Node): # name yet to be decided
     def __init__(self, args: argparse.Namespace | Dict[str, str | List[str]]): # can test | more
         super().__init__("pcd_filter_node")
 
-        to_pcd_formats = {
-            "depth": self.depth_to_pcd,
-            "rgbd": self.rgbd_to_pcd,
-            "static": self.mesh_to_pcd
-        }
-
-        chosen_way = ''
-
-        # maybe can make pcd method in a function, that is called here
-        if not args.path_mesh is None:
-            self.get_logger().info(f"Found path for mesh file. Ignoring depth topic")
-            self.to_pcd = to_pcd_formats["static"]
-        elif args.topic_depth is None:
-            self.get_logger().error(f"No value provided for depth topic")
-            return
         if args.topic_pcd is None:
             self.get_logger().error(f"No value provided for pcd topic")
             return
+
         if args.path_handeye is None:
             self.get_logger().error(f"No value provided for handeye calibration result path")
             return
@@ -106,83 +101,124 @@ class PCDFilter(Node): # name yet to be decided
             self.get_logger().info(f"Found path for depth image params. Ignoring depth info topic")
             self.load_cam_params(args.path_depth_info)
 
-        self.depth_node = ImageSubscriberNode(
-            image_topic=args.topic_depth,
-            info_topic=args.topic_depth_info,
-            node_name='img_subscriber'
-        )
-        self.load_calib(args.path_handeye)
+        elif args.topic_depth_info is None:
+            self.get_logger().error(f"No value provided for depth info topic")
+            return
 
-        if not args.topic_rgb is None:
-            self.rgb_node = ImageSubscriberNode(
-                image_topic=args.topic_rgb,
-                node_name='rgb_image_subscriber' 
-            )
-            self.to_pcd = to_pcd_formats["rgbd"]
+        # maybe can make pcd method in a function, that is called here
+        if not args.path_mesh is None:
+            self.get_logger().info(f"Found path for mesh file. Ignoring depth topic")
+            self.get_logger().info(f"For pointcloud using file {args.path_mesh}")
+            self.pcd = o3d.io.read_triangle_mesh(args.path_mesh)
+            # read_pcd_file
+            self.to_pcd = self.file_to_pcd
 
-        if chosen_way == "static":
-            o3d.io.read_triangle_mesh(args.path_mesh)
+        elif args.topic_depth is None:
+            self.get_logger().error(f"No value provided for depth topic")
+            return
 
-        elif chosen_way == "rgbd":
-            self.rgb_node = ImageSubscriberNode(
-                image_topic=args.topic_rgb,
-                node_name='rgb_image_subscriber' 
-            )
-            self.rgb_node = ImageSubscriberNode(
-                image_topic=args.topic_depth,
-                info_topic=args.topic_depth_info,
-                node_name='rgb_image_subscriber' 
-            )
-
-        self.to_pcd = to_pcd_formats["null"]
-        
-    def forward(self, color_frame, depth_frame):
-        if color_frame is None:
-            pcd = self.depth_to_pcd(depth_frame)
         else:
-            pcd = self.rgbd_to_pcd(color_frame, depth_frame)
-        # could make unprojection with distortion, maybe
+            self.cam_params = None
+            self.depth_sub = ImageSubscriber(
+                node=self,
+                image_topic=args.topic_depth,
+                info_topic=args.topic_depth_info
+            )
+            self.get_logger().info(f"Using depth topic {args.topic_depth}")
+            if args.debug:
+                cv.namedWindow("Depth window", cv.WINDOW_NORMAL)
+                cv.resizeWindow("Depth window", (640, 480))
+            self.load_calib(args.path_handeye)
 
-        pcd_pub_node.callback(np.asarray(pcd.points)[np.where(np.asarray(mesh.points)[:,2] < 0.75)], 'cam')
+            if not args.topic_rgb is None:
+                self.rgb_sub = ImageSubscriber(
+                    node=self,
+                    image_topic=args.topic_rgb
+                )
+                self.get_logger().info(f"Using rgb topic {args.topic_rgb}")
+                if args.debug:
+                    cv.namedWindow("RGB window", cv.WINDOW_NORMAL)
+                    cv.resizeWindow("RGB window", (640, 480))
+                self.to_pcd = self.rgbd_to_pcd
+
+            else:
+                self.rgb_sub = None
+                self.to_pcd = self.depth_to_pcd
+
+        self.tf_pub = TFPublisher(
+            node=self
+        )
+
+        self.pcd_pub = PCDPublisher(
+            node=self,
+            pcd_topic = args.topic_pcd
+        )
+
+        self.get_logger().info(f"Pointcloud will be published to topic {args.topic_pcd} with frame id {'cam'}")
+
+        self.debug = args.debug
+
+        # freq = 0.5
+        # self.timer = self.create_timer(freq, self.callback)
+
+    def callback(self):
+
+        if self.cam_params is None:
+            if self.depth_sub.latest_info_msg is None:
+                self.get_logger().warning(f"A value for depth camera parameters, has not been recieved from topic: {self.depth_sub.info_sub.topic}")
+                return
+            self.cam_params = CameraParams(self.depth_sub.latest_info_msg)
+            self.get_logger().info(f"Depth camera parameters: {self.cam_params}")
+
+        if self.debug:
+            cv.imshow("Depth window", self.depth_sub.latest_frame)
+
+            if not self.rgb_sub is None:
+                np_image = self.rgb_sub.latest_frame
+                np_image = cv.cvtColor(np_image, cv.COLOR_BGR2RGB)
+                cv.imshow("RGB window", np_image)
+
+            key = cv.waitKey(1)
+            # if key == 113:
+            #     exit
+
+        self.tf_pub.write_tf('world', 'cam', self.T_b_c)
+
+        pcd = self.to_pcd()
+
+        pcd = np.asarray(pcd.points)[np.where(np.asarray(pcd.points)[:,2] < 0.75)]
+
+        self.pcd_pub.callback(pcd, 'cam')
         # or make publishing function
 
-    def static_forward(self):
-        t_w_c = np.array([0.4,-0.5,0.34])
-        # q_w_c = Rotation.from_rotvec(np.array([0,0,0], float) * np.pi/2).as_matrix()
-        q_w_c = Rotation.from_rotvec(np.array([1,0,0], float) * -np.pi/2).as_matrix()
-        # q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,0,1], float) * np.pi/2).as_matrix()
-        q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,-0.5,0], float) * np.pi/2).as_matrix()
-        q_w_c = Rotation.from_matrix(q_w_c).as_quat()
-        cam_tf = ndarray_to_tf2(t_w_c, q_w_c)
+    def depth_to_pcd(self):
+        frame = self.depth_sub.latest_frame
 
-        t_c_o = np.array([0, 0, 0.56])
-        q_c_o = Rotation.from_rotvec(np.array([2,0,0], float) * np.pi/2).as_matrix()
-        q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0.,-1.3,0], float) * np.pi/2).as_matrix()
-        q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0,0,1.], float) * np.pi/2).as_matrix()
-        q_c_o = Rotation.from_matrix(q_c_o).as_quat()
-        obj_tf = ndarray_to_tf2(t_c_o, q_c_o)
-        tf_pub_node.write_tf('world', 'cam', cam_tf)
-        tf_pub_node.write_tf('cam', 'obj_pcd', obj_tf)
-        pcd_pub_node.callback(object_points, 'obj_pcd')
-
-    def depth_to_pcd(self, frame):
-        o3d_cam_params = o3d.camera.PinholeCameraIntrinsic(self.cam_params.w, self.cam_params.h, self.cam_params.K)
+        o3d_cam_params = o3d.camera.PinholeCameraIntrinsic(self.cam_params.width, self.cam_params.height, self.cam_params.K)
         o3d_image = o3d.geometry.Image(frame.astype(np.float32))
-        pcd = pcd.create_from_depth_image(o3d_image, o3d_cam_params)
+        pcd = o3d.geometry.PointCloud.create_from_depth_image(o3d_image, o3d_cam_params)
 
         return pcd
 
-    def rgbd_to_pcd(self, color_frame, depth_frame):
-        o3d_cam_params = o3d.camera.PinholeCameraIntrinsic(self.cam_params.w, self.cam_params.h, self.cam_params.K)
+    def rgbd_to_pcd(self):
+        color_frame = self.rgb_sub.latest_frame
+        depth_frame = self.depth_sub.latest_frame
+
+        o3d_cam_params = o3d.camera.PinholeCameraIntrinsic(self.cam_params.width, self.cam_params.height, self.cam_params.K)
+
         o3d_color_image = o3d.geometry.Image(color_frame.astype(np.float32))
         o3d_depth_image = o3d.geometry.Image(depth_frame.astype(np.float32))
         rgbd_image = o3d.geometry.RGBDImage().create_from_color_and_depth(
             color = o3d_color_image,
             depth = o3d_depth_image
         )
-        pcd = pcd.create_from_rgbd_image(rgbd_image, o3d_cam_params)
+
+        pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image, o3d_cam_params)
 
         return pcd
+
+    def file_to_pcd(self):
+        return self.pcd
 
     def read_pcd_file(self):
         pass
@@ -195,33 +231,26 @@ class PCDFilter(Node): # name yet to be decided
         with open(path, 'r') as f:
             calib = yaml.safe_load(f)
 
-        self.T_b_w = np.identity(4)
-        T_b_w_quat = np.array([
-            calib["T_b_w"]["qw"],
-            calib["T_b_w"]["qx"],
-            calib["T_b_w"]["qy"],
-            calib["T_b_w"]["qz"]
-        ])
-        self.T_b_w[:3,:3] = Rotation.from_quat(T_b_w_quat, scalar_first=True).as_matrix()
-        self.T_b_w[:3,3:] = np.array([
-            calib["T_b_w"]["x"],
-            calib["T_b_w"]["y"],
-            calib["T_b_w"]["z"]
-        ]).reshape(3,1)
+        # yaml.add_representer(OrderedDict, represent_dict_order)
+        # yaml.dump(d, open('test.yaml', 'w'), default_flow_style=None)
 
-        self.T_g_c = np.identity(4)
-        T_g_c_quat = np.array([
-            calib["T_g_c"]["qw"],
-            calib["T_g_c"]["qx"],
-            calib["T_g_c"]["qy"],
-            calib["T_g_c"]["qz"]
-        ])
-        self.T_g_c[:3,:3] = Rotation.from_quat(T_g_c_quat, scalar_first=True).as_matrix()
-        self.T_g_c[:3,3:] = np.array([
-            calib["T_g_c"]["x"],
-            calib["T_g_c"]["y"],
-            calib["T_g_c"]["z"]
-        ]).reshape(3,1)
+        self.T_b_c = np.identity(4)
+        self.T_b_c[:3,:3] = Rotation.from_quat(calib['T_b_c']['xyzw'], scalar_first=False).as_matrix()
+        self.T_b_c[:3,3:] = np.array([calib["T_b_c"]["xyz"]]).T
+
+        # self.T_g_c = np.identity(4)
+        # T_g_c_quat = np.array([
+        #     calib["T_g_c"]["qw"],
+        #     calib["T_g_c"]["qx"],
+        #     calib["T_g_c"]["qy"],
+        #     calib["T_g_c"]["qz"]
+        # ])
+        # self.T_g_c[:3,:3] = Rotation.from_quat(T_g_c_quat, scalar_first=True).as_matrix()
+        # self.T_g_c[:3,3:] = np.array([
+        #     calib["T_g_c"]["x"],
+        #     calib["T_g_c"]["y"],
+        #     calib["T_g_c"]["z"]
+        # ]).reshape(3,1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -229,7 +258,8 @@ if __name__ == '__main__':
         # usage="pcd_pub.py [--topic_depth DEPTH_TOPIC] [--topic_depth_info DEPTH_INFO_TOPIC] [--topic_rgb RGB_TOPIC] [--topic_pcd PCD_TOPIC] [--path_depth_info DEPTH_INFO_PATH] [--path_handeye HANDEYE_PATH]",
         # "pcd_pub [--topic_depth DEPTH_TOPIC] [--topic_depth_info DEPTH_INFO_TOPIC] [--topic_rgb RGB_TOPIC] [--topic_pcd PCD_TOPIC] [--path_depth_info DEPTH_INFO_PATH] [--path_handeye HANDEYE_PATH]"
         # "pcd_pub --topic_depth DEPTH_TOPIC --topic_depth_info DEPTH_INFO_TOPIC --topic_rgb RGB_TOPIC --topic_pcd PCD_TOPIC --path_depth_info DEPTH_INFO_PATH --path_handeye HANDEYE_PATH"
-        description=''
+        description='',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     parser.add_argument(
@@ -252,7 +282,8 @@ if __name__ == '__main__':
 
     parser.add_argument(
         "--topic_rgb",
-        help="cameras topic to aquire images"
+        help="cameras topic to aquire images",
+        default="/camera/camera/color/image_raw",
     )
 
     parser.add_argument(
@@ -269,83 +300,97 @@ if __name__ == '__main__':
     parser.add_argument(
         "--path_mesh",
         help="cameras topic to aquire images",
-        default="datasets/Realdex/Realdex/meshdata/box.obj"
+        # default="datasets/Realdex/Realdex/meshdata/box.obj"
+    )
+
+    parser.add_argument(
+        '--debug',
+        action='store_true'
     )
 
     args = parser.parse_args()
     rclpy.init()
-    pf = UserNode(args)
-    mesh = o3d.geometry.PointCloud()
 
-    depth_node = ImageSubscriberNode(
-        image_topic=args.topic_depth,
-        info_topic=args.topic_depth_info,
-        node_name='img_subscriber'
-    )
+    pf = PCDFilter(args)
+    # mesh = o3d.geometry.PointCloud()
+
+    # depth_node = ImageSubscriberNode(
+    #     image_topic=args.topic_depth,
+    #     info_topic=args.topic_depth_info,
+    #     node_name='img_subscriber'
+    # )
 
     # pcd_node = PCDSubscriberNode(
     #     pcd_topic=args.pcd,
     #     node_name='pcd_subscriber'
     # )
 
-    pcd_pub_node = PCDPublisherNode(
-        pcd_topic=args.pcd,
-        node_name='pcd_publisher'
-    )
+    # pcd_pub_node = PCDPublisherNode(
+    #     pcd_topic=args.pcd,
+    #     node_name='pcd_publisher'
+    # )
 
-    tf_pub_node = TFPublisherNode(
-        node_name='obj_points'
-    )
+    # tf_pub_node = TFPublisherNode(
+    #     node_name='obj_points'
+    # )
 
-    executor = rclpy.executors.MultiThreadedExecutor()
-    executor.add_node(img_node)
-    executor.add_node(pcd_pub_node)
-    executor.add_node(tf_pub_node)
+    # executor = rclpy.executors.MultiThreadedExecutor()
+    # executor.add_node(img_node)
+    # executor.add_node(pcd_pub_node)
+    # executor.add_node(tf_pub_node)
 
-    executor_thread = threading.Thread(target=executor.spin, daemon=True)
-    executor_thread.start()
+    # executor_thread = threading.Thread(target=executor.spin, daemon=True)
+    # executor_thread.start()
     
-    img = np.zeros((10,10,3))
+    # img = np.zeros((10,10,3))
 
-    pcd_model_path = 'data/Realdex/Realdex/meshdata/duck_toy.obj'
-    mesh = o3d.io.read_triangle_mesh(pcd_model_path)
-    mesh.compute_triangle_normals()
-    mesh.compute_vertex_normals()
+    # pcd_model_path = 'data/Realdex/Realdex/meshdata/duck_toy.obj'
+    # mesh = o3d.io.read_triangle_mesh(pcd_model_path)
+    # mesh.compute_triangle_normals()
+    # mesh.compute_vertex_normals()
     # object_points = np.asarray(mesh.vertices)
-    pts_count = int(len(mesh.vertices))
-    object_pcd = mesh.sample_points_uniformly(number_of_points=pts_count, use_triangle_normal=False)
-    object_points = np.asarray(object_pcd.points)
-    object_normals = np.asarray(object_pcd.normals)
-    object_points = np.concat((object_points,object_normals),axis=1)
+    # pts_count = int(len(mesh.vertices))
+    # object_pcd = mesh.sample_points_uniformly(number_of_points=pts_count, use_triangle_normal=False)
+    # object_points = np.asarray(object_pcd.points)
+    # object_normals = np.asarray(object_pcd.normals)
+    # object_points = np.concat((object_points,object_normals),axis=1)
 
-    rate = tf_pub_node.create_rate(2)
+    # rate = tf_pub_node.create_rate(2)
 
-    print(f'Subscribing to {args.cam}')
-    print(f'Publishing {args.pcd}')
-    # try:
-    #     while rclpy.ok():
-    #         pass
-    
+    # print(f'Subscribing to {args.cam}')
+    # print(f'Publishing {args.pcd}')
+
+    exec = rclpy.executors.MultiThreadedExecutor()
+    exec.add_node(pf)
+
+    executor_thread = threading.Thread(target=exec.spin, daemon=True)
+    executor_thread.start()
+
     try:
         while rclpy.ok():
-            t_w_c = np.array([0.4,-0.5,0.34])
-            # q_w_c = Rotation.from_rotvec(np.array([0,0,0], float) * np.pi/2).as_matrix()
-            q_w_c = Rotation.from_rotvec(np.array([1,0,0], float) * -np.pi/2).as_matrix()
-            # q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,0,1], float) * np.pi/2).as_matrix()
-            q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,-0.5,0], float) * np.pi/2).as_matrix()
-            q_w_c = Rotation.from_matrix(q_w_c).as_quat()
-            cam_tf = make_tf(t_w_c, q_w_c)
+            pf.callback()
+            # exec.spin()
+    
+    # try:
+    #     while rclpy.ok():
+    #         t_w_c = np.array([0.4,-0.5,0.34])
+    #         # q_w_c = Rotation.from_rotvec(np.array([0,0,0], float) * np.pi/2).as_matrix()
+    #         q_w_c = Rotation.from_rotvec(np.array([1,0,0], float) * -np.pi/2).as_matrix()
+    #         # q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,0,1], float) * np.pi/2).as_matrix()
+    #         q_w_c = q_w_c @ Rotation.from_rotvec(np.array([0,-0.5,0], float) * np.pi/2).as_matrix()
+    #         q_w_c = Rotation.from_matrix(q_w_c).as_quat()
+    #         cam_tf = make_tf(t_w_c, q_w_c)
 
-            t_c_o = np.array([0, 0, 0.56])
-            q_c_o = Rotation.from_rotvec(np.array([2,0,0], float) * np.pi/2).as_matrix()
-            q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0.,-1.3,0], float) * np.pi/2).as_matrix()
-            q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0,0,1.], float) * np.pi/2).as_matrix()
-            q_c_o = Rotation.from_matrix(q_c_o).as_quat()
-            obj_tf = make_tf(t_c_o, q_c_o)
-            tf_pub_node.write_tf('world', 'cam', cam_tf)
-            tf_pub_node.write_tf('cam', 'obj_pcd', obj_tf)
-            pcd_pub_node.callback(object_points, 'obj_pcd')
-            rate.sleep()
+    #         t_c_o = np.array([0, 0, 0.56])
+    #         q_c_o = Rotation.from_rotvec(np.array([2,0,0], float) * np.pi/2).as_matrix()
+    #         q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0.,-1.3,0], float) * np.pi/2).as_matrix()
+    #         q_c_o = q_c_o @ Rotation.from_rotvec(np.array([0,0,1.], float) * np.pi/2).as_matrix()
+    #         q_c_o = Rotation.from_matrix(q_c_o).as_quat()
+    #         obj_tf = make_tf(t_c_o, q_c_o)
+    #         tf_pub_node.write_tf('world', 'cam', cam_tf)
+    #         tf_pub_node.write_tf('cam', 'obj_pcd', obj_tf)
+    #         pcd_pub_node.callback(object_points, 'obj_pcd')
+    #         rate.sleep()
     # try:
     #     while rclpy.ok():
     #         with img_node.lock:
@@ -377,7 +422,7 @@ if __name__ == '__main__':
     #             break
             
     except KeyboardInterrupt:
-        # cv.destroyAllWindows()
+        cv.destroyAllWindows()
         pass
 
     # rclpy.shutdown()
